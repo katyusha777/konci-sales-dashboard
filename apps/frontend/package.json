@@ -11,10 +11,12 @@
     "deploy": "nuxt build && wrangler pages deploy dist --project-name=konci-frontend"
   },
   "dependencies": {
+    "@nuxt/ui": "^4.9.0",
     "nuxt": "^4.4.8",
     "vue": "^3.5.39"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.116",
     "typescript": "^5.9.3",
     "wrangler": "^4.110.0"
   }

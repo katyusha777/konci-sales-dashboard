@@ -1,0 +1,16 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Tailwind v4 preflight sets buttons to cursor-default — restore pointer
+   for all interactive controls (buttons, switches, menu items). */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  [role="switch"]:not(:disabled),
+  [role="menuitem"],
+  [role="option"],
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) {
+    cursor: pointer;
+  }
+}

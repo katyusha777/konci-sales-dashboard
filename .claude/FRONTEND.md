@@ -19,24 +19,30 @@ UDashboardSidebar / UDashboardNavbar / UDashboardPanel`, `UTable` (sorting/pagin
   semantic colors (`primary/success/error/warning`) — no custom palette. Dark mode comes
   free with Nuxt UI; keep it enabled.
 
-## Directory layout (Nuxt 4 `app/` dir, adapted from bluegem-app)
+## Directory layout (bluegem-style: `src/` root, `src/app/` infra — `srcDir: 'src/'`)
 
 ```
-apps/frontend/app/
-├── api/              # THE data layer (bluegem's Api/XxxApi/XxxAdapter collapsed into one)
-│   ├── client.ts     # $api fetch wrapper: envelope unwrap + ApiError
-│   ├── leads.api.ts  # One module per domain: LeadsApi.list(filters), .get(id), .import(...)
-│   ├── campaigns.api.ts, templates.api.ts, avatars.api.ts, stats.api.ts
-├── types/            # One .d.ts per domain (lead.d.ts, campaign.d.ts, api.d.ts…), barrel index.ts
+apps/frontend/src/
+├── app/              # Non-UI infrastructure, like bluegem's src/app/
+│   ├── api/          # THE data layer (bluegem's Api/XxxApi/XxxAdapter collapsed into one)
+│   │   ├── client.ts # $api fetch wrapper: envelope unwrap + ApiError (+ dummy() helper)
+│   │   ├── leads.api.ts  # One module per domain: LeadsApi.list(filters), .get(id)…
+│   │   ├── campaigns.api.ts, templates.api.ts, avatars.api.ts, stats.api.ts, auth.api.ts
+│   ├── dummy-data/   # FRONTEND-FIRST phase: typed fixtures (leads.ts, campaigns.ts…).
+│   │                 # api modules serve these until each backend phase swaps their
+│   │                 # internals to $api — signatures/types never change, pages untouched.
+│   └── types/        # One .d.ts per domain (lead.d.ts, campaign.d.ts…), barrel index.ts
 ├── components/
-│   ├── ui/           # Small shared bits ONLY if Nuxt UI lacks them (StatCard, StatusBadge, EmptyState)
-│   └── leads/ campaigns/ templates/ avatars/   # Domain components (LeadTable.vue, CampaignWizard.vue)
-├── composables/      # Sparingly — most logic lives in api modules or pages
-├── stores/           # Pinia, ONLY for genuinely cross-page state (ui.ts, filters). Page data ≠ store data.
-├── layouts/          # default.vue (dashboard shell), public.vue (video/unsubscribe pages)
-├── pages/            # File-based routes per PROJECT_PLAN §7
+│   ├── ui/           # Small shared bits ONLY if Nuxt UI lacks them (StatCard, StatusBadge)
+│   └── leads/ campaigns/ templates/ avatars/   # Domain components as they grow
+├── composables/      # Sparingly — most logic lives in api modules or pages (useAuth lives here)
+├── layouts/          # default.vue (dashboard shell), public.vue (video/unsubscribe/login)
+├── pages/            # File-based routes per PROJECT_PLAN §7 (Nuxt-managed, stays at src root)
 └── utils/            # formatDate, formatUsd, etc. (auto-imported)
 ```
+
+Imports use `~/app/api/…`, `~/app/types`. Nuxt-managed folders (pages, layouts,
+components, composables, middleware) must stay at the `src/` root — only infra goes in `src/app/`.
 
 ## API layer — one clean layer, typed end to end
 
@@ -70,8 +76,9 @@ export abstract class LeadsApi {
 }
 ```
 
-- Base URL from `useRuntimeConfig().public.apiUrl` (`NUXT_PUBLIC_API_URL` env — dev:
-  `http://localhost:8787`, prod: the deployed Worker URL).
+- **`/api` is proxied through Nuxt/Nitro** (dev: to `localhost:8787`; prod: route rule to
+  the Worker URL via `API_PROXY_URL`). Frontend always calls its own origin — first-party
+  session cookies, zero CORS.
 - Types mirror the backend DTOs (`I` prefix interfaces, `T` prefix aliases, bluegem
   style). When drift becomes painful, promote shared types to a `packages/shared`
   workspace package — don't hand-copy a third time.
@@ -115,10 +122,14 @@ export abstract class LeadsApi {
   of building parallel mobile card layouts.
 - Public pages (`/v/[token]`, `/unsubscribe/[token]`, `/login`) use the `public` layout:
   no nav, centered card, Konci branding only.
-- **Auth**: UniFi Identity SSO — `/login` is a single "Sign in with UniFi" button that
-  redirects to the API's OIDC flow; the API sets the session cookie and redirects back.
-  A global route middleware redirects unauthenticated users to `/login` (public pages
-  excluded). Current user via a tiny Pinia `auth` store hydrated from `GET /api/auth/me`.
+- **Auth (PARKED, 2026-07-11)**: UniFi SSO is fully built on the API (`/api/auth/*`,
+  sessions in DB) and `/login` still triggers it, but the frontend route guard was
+  removed because the first login attempt failed — most likely the redirect URI
+  `http://localhost:3000/api/auth/callback` isn't registered in the UniFi Identity OAuth
+  app. Once registered and verified, re-create `src/middleware/auth.global.ts` (~15
+  lines: skip public prefixes `/login`, `/v/`, `/unsubscribe`; hydrate `useAuth()` via
+  `fetchUser()`; redirect to `/login` when null) and restore the user/logout footer in
+  the default layout.
 
 ## Conventions
 

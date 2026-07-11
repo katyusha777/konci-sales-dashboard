@@ -62,6 +62,8 @@ a queryable cost ledger.
 - identity: `name`, `domain` (nullable, unique — dedup key), `googlePlaceId` (nullable unique — dedup key), `website`, `email`, `phone`
 - location: `street`, `city`, `state`, `postalCode`, `country`, `industry`, `categories[]`
 - quality: `googleRating`, `googleReviewCount`, `employeeCount`, `socialLinks Json?`
+- enrichment extras: `services[]`, `businessHours Json?`, `description`, `ownerName`
+  (from Scrap.io website data — added 2026-07-12 after reviewing the old app's lead pages)
 - source: `source` enum (CSV | SCRAPIO | MANUAL), `sourceMeta Json?` (import batch, query used)
 - enrichment: `enrichmentStatus` (PENDING | IN_PROGRESS | COMPLETED | FAILED | SKIPPED),
   `enrichmentScore` (Int 0–100), `enrichmentAttempts` (Int), `lastEnrichedAt`, `enrichmentError`
@@ -91,10 +93,14 @@ a queryable cost ledger.
 
 **Template** (`templates`) — email + optional video, editable in place (NO versioning/AB tables)
 - `name`, `subject`, `body` (HTML with `{{placeholders}}`)
-- video part: `videoScript` (text w/ placeholders), `avatarId?`, `heygenTemplateId?`
-  (either script+avatar, or a HeyGen studio template + variables)
+- video part, two modes (2026-07-12): plain avatar video = `avatarId` + `videoScript`
+  (ONE textarea); HeyGen studio template = `heygenTemplateId` + `videoScenes[]` (one text
+  per scene — each scene is a HeyGen template variable, so scenes are structurally required)
 - Placeholders: `{{business_name}} {{contact_first_name}} {{industry}} {{city}}
   {{video_url}} {{demo_phone}} {{demo_pin}} {{unsubscribe_url}}`
+- Conditionals (kept dead simple, no nesting): `{{#if industry}}…{{/if}}` renders only
+  when the variable is non-empty. Renderer lives in frontend `utils/template.ts`; the
+  backend EmailService must implement the same two regexes.
 
 **Campaign** (`campaigns`) — the rename of the old repo's "Workflow"
 - `name`, `description`, `status` (DRAFT | ACTIVE | PAUSED | COMPLETED)
@@ -241,30 +247,43 @@ already exists; investigate when the demo-number/PIN integration comes up.
   shows "Call your demo: {demoPhone}, PIN {demoPin}", CTA link. No dashboard chrome.
 - `/unsubscribe/:token` — public one-click unsubscribe.
 
-## 8. Build order
+## 8. Build order — FRONTEND-FIRST
 
-**Phase 1 — Foundation + Leads** *(schema, auth, CSV, Scrap.io)*
-Prisma schema (all models above, one migration) · shared enums/DTOs · auth (UniFi SSO
-OIDC flow, session cookies, middleware, login page) · ScrapioService · CSV import
-(parse, map, dedup, report) · Lead/Contact/Note CRUD controllers · leads list + detail
-pages · Scrap.io search UI → import.
+Client decision (2026-07-11): build the entire frontend on **typed dummy data** first, so
+the owner can click through and validate everything before any backend exists. The dummy
+data lives in `apps/frontend/app/dummy-data/`, is typed against `app/types/` (which mirror
+the §3 domain model), and **is the API contract**: backend phases replace dummy internals
+of `app/api/*.api.ts` modules one domain at a time — page code never changes. The one
+real backend slice built early is UniFi SSO auth (can't be dummied — needs the OIDC
+secret exchange + session cookie).
 
-**Phase 2 — Enrichment** *(Apollo, scoring, costs)*
-ApolloService · EnrichmentService (score, costs, retry guard) · enrich endpoints (single +
-bulk) · score breakdown + cost display on lead detail · dedup hardening.
+**Phase F1 — Frontend shell + real auth**
+Nuxt UI v4 setup · dashboard layout (sidebar/navbar) + public layout · `app/types/` for
+all domains · `app/dummy-data/` seeded realistically · api modules returning dummy data ·
+API: `users`/`sessions` migration, AuthService (UniFi OIDC), auth middleware, `/api/auth/*`
+· `/api` proxied through Nuxt (first-party cookies, no CORS) · login page + route guard.
 
-**Phase 3 — Avatars & Templates** *(HeyGen)*
-HeygenService · avatar sync + management UI · Template CRUD + editor + placeholder
-validation · test video generation → R2 → `/v/:token` page + VideoEvent tracking.
+**Phase F2 — Full frontend on dummy data** *(iterate with the owner until it feels right)*
+Leads list (filters, bulk select) + lead detail (contacts, timeline, costs, notes, konci
+fields) · CSV import flow + Scrap.io search flow (simulated) · campaigns list/wizard/detail
+· templates list/editor + preview · avatars grid · dashboard stats · `/v/[token]` +
+unsubscribe public pages · empty/loading/error states.
 
-**Phase 4 — Campaigns** *(the payoff)*
-Campaign/Step/CampaignLead CRUD + wizard · EmailService (Resend + test mode) · worker
-scheduler (sends + rate limits + video polling) · Resend webhooks (delivered/open/click/
-bounce/complaint → EmailEvent + lead status updates + auto-suppression) · unsubscribe
-page · campaign detail dashboards.
+**Phase B1 — Leads backend** *(schema migration for lead domain + swap dummy → real)*
+Full Prisma schema · Lead/Contact/Note controllers · CSV import · ScrapioService + search
+· swap `leads.api.ts` internals to `$api`.
 
-**Phase 5 — Overview & polish**
-Dashboard stats page · lead pipeline board · CSV export · alerting on failures (email to us).
+**Phase B2 — Enrichment backend**: ApolloService · EnrichmentService (score, costs, retry
+guard) · swap enrichment calls.
+
+**Phase B3 — Avatars & Templates backend**: HeygenService · avatar sync · template CRUD ·
+test video → R2 → real `/v/:token` + VideoEvents.
+
+**Phase B4 — Campaigns backend**: campaign CRUD · EmailService (Resend + test mode) ·
+worker scheduler (rate limits, video polling) · Resend webhooks → EmailEvent +
+auto-suppression · unsubscribe.
+
+**Phase B5 — Stats & polish**: real dashboard queries · CSV export · failure alerting.
 
 **Later (explicitly out of V1):** Konci platform API integration (auto-provision demo
 number/PIN, call + PIN-entry tracking — likely APIs or direct DB access, TBD by Konci) ·
@@ -278,6 +297,10 @@ old-data migration from the prototype's Neon DB.
 1. **Auth**: **UniFi Identity SSO** (client's infra; creds in env). Plain OIDC code flow +
    our own session cookie — no auth framework. Users auto-created on first login; access
    is managed in UniFi. Single role in V1. (Earlier open-registration idea superseded.)
+   **Status 2026-07-11: PARKED** — API side fully built and protecting `/api/*`; first
+   login attempt failed (likely `http://localhost:3000/api/auth/callback` not registered
+   as a redirect URI in the UniFi OAuth app — the old repo used port 3001). Frontend
+   route guard removed until this is sorted; `/login` still triggers the flow for testing.
 2. **Konci demo number/PIN**: entered manually on the lead. Integration (API or direct DB)
    comes later from Konci's side — note `KONCI_SERVICE_TOKEN` in the old env suggests an
    API already exists.

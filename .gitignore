@@ -18,6 +18,10 @@ dist/
 # generated
 apps/api/src/generated/
 
+# playwright (agent browser testing)
+.playwright-mcp/
+.playwright-screenshots/
+
 # misc
 .DS_Store
 *.log

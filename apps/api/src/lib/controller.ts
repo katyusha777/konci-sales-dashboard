@@ -28,8 +28,10 @@ export abstract class Controller {
     return this.c.var.prisma
   }
 
-  // When auth middleware exists, expose the authenticated user the same way:
-  // protected get user() { return this.c.var.user }
+  // Set by authMiddleware — available in all controllers behind protected routes.
+  protected get user() {
+    return this.c.var.user
+  }
 
   protected empty(): [] {
     return []
