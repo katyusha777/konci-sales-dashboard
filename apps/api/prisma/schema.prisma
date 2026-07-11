@@ -1,0 +1,19 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  runtime  = "workerd"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Example model — replace with the real schema.
+// Convention: camelCase fields in code, snake_case in the database via
+// @map (columns) and @@map (plural snake_case table names).
+model HealthCheck {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("health_checks")
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "konci-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  }
+  // Secrets (e.g. DATABASE_URL) live in .dev.vars locally and are set in
+  // production with: wrangler secret put DATABASE_URL
+}

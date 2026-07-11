@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+.output/
+.nuxt/
+.wrangler/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# generated
+apps/api/src/generated/
+
+# misc
+.DS_Store
+*.log

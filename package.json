@@ -1,0 +1,26 @@
+{
+  "name": "konci-sales-dashboard",
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@11.11.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @konci/api dev",
+    "dev:worker": "pnpm --filter @konci/worker dev",
+    "dev:frontend": "pnpm --filter @konci/frontend dev",
+    "build": "pnpm -r build",
+    "deploy": "pnpm -r --workspace-concurrency=1 run deploy",
+    "deploy:api": "pnpm --filter @konci/api deploy",
+    "deploy:worker": "pnpm --filter @konci/worker deploy",
+    "deploy:frontend": "pnpm --filter @konci/frontend deploy",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^9.1.0",
+    "eslint": "^10.6.0"
+  }
+}
