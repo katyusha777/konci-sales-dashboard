@@ -46,6 +46,9 @@ Turbo→plain pnpm workspace.
 - **Enums**: `src/enums/`, string-backed, mirrored in Prisma enums.
 - **Database**: snake_case plural tables via `@@map`, snake_case columns via `@map`,
   camelCase in code. Renames = hand-written `ALTER TABLE ... RENAME` migrations.
+- **IDs**: every primary key is a UUIDv7 — `String @id @default(uuid(7)) @db.Uuid`
+  (time-ordered so rows sort by creation; generated client-side by Prisma).
+  Adopted 2026-07-12 (owner request); the full §3 schema shipped with it in Phase B1.
 - **Shared code** between api/worker/frontend: extract to a `packages/shared` workspace
   package when first needed (types like `ApiResponse`, enums, DTO types).
 
@@ -77,7 +80,11 @@ a queryable cost ledger.
 **Contact** (`contacts`) — person at a business
 - `leadId`, `firstName`, `lastName`, `email` (unique per lead), `phone`, `jobTitle`,
   `linkedinUrl`, `priority` (Int — send order), `emailStatus` (UNKNOWN | VALID |
-  BOUNCED | UNSUBSCRIBED | COMPLAINED), `source` (SCRAPIO | APOLLO | MANUAL)
+  BOUNCED | UNSUBSCRIBED | COMPLAINED), `source` (CSV | SCRAPIO | APOLLO | MANUAL |
+  WEBSITE | PDL | HUNTER | FULLENRICH — discovery origin, never overwritten)
+- waterfall bookkeeping (added in B2): `confidence` (Int? 1–10, save floor ≥ 4),
+  `enrichedAt` (DateTime? — stamped even on a miss so re-runs never re-spend credits;
+  a forced re-enrich nulls it)
 
 **LeadNote** (`lead_notes`) — salesperson log: `leadId`, `author`, `body`, `createdAt`
 
@@ -86,6 +93,16 @@ a queryable cost ledger.
   `description`, `meta Json?`, `createdAt`
 - Reference prices from old repo: Scrap.io place ~$0.017-equivalent, Apollo match ~$0.04,
   HeyGen video ≫ everything (why only 1–5% of leads get one)
+- One ENRICHMENT row per enrichment *run* (the sum; per-provider breakdown in `meta`) —
+  per-call detail lives in `enrichment_responses`, money aggregates live here.
+
+**EnrichmentResponse** (`enrichment_responses`) — *(added 2026-07-12, owner request)*
+one row per provider call made during enrichment: the audit/debug ledger
+- `leadId`, `provider` enum (GOOGLE_PLACES | FIRECRAWL | OPENROUTER | PDL | HUNTER |
+  FULLENRICH | APOLLO | SCRAPIO), `operation` (e.g. `company_enrich`, `find_email`),
+  `request Json`, `response Json?` (raw provider payload, giant markdown truncated ~30k),
+  `success`, `error?`, `costUsd` (Decimal), `durationMs`, `createdAt`
+- Surfaced on the lead detail page ("Activity" tab) with raw JSON viewers.
 
 **Avatar** (`avatars`) — presenter for videos, created/trained in HeyGen studio, referenced here
 - `name`, `heygenAvatarId`, `voiceId`, `previewImageUrl`, `isActive`, `lastSyncedAt`
@@ -293,14 +310,23 @@ fields) · CSV import flow + Scrap.io search flow (simulated) · campaigns list/
 · templates list/editor + preview · avatars grid · dashboard stats · `/v/[token]` +
 unsubscribe public pages · empty/loading/error states.
 
-**Phase B1 — Leads backend** *(schema migration for lead domain + swap dummy → real)*
-Full Prisma schema · Lead/Contact/Note controllers · CSV import · ScrapioService + search
-· swap `leads.api.ts` internals to `$api`.
+**Phase B1 — Leads backend** *(DONE 2026-07-12)*
+Full §3 Prisma schema (UUIDv7 ids) · `LeadService` (dedup: googlePlaceId → domain →
+name+city) + `LeadController` + `/api/leads/*` · manual "Add lead" form (owner request —
+primary input while Scrap.io has no API access) · real CSV import (client RFC-4180 parser
+in `utils/csv.ts` → LLM header-mapping prefill → mapping step → dedup report) ·
+Scrap.io search/import wired real but **blocked on the subscription** (403 surfaces
+verbatim in the modal until API access is bought) · `leads.api.ts` swapped to `$api`.
 
-**Phase B2 — Enrichment backend**: EnrichmentService (score, costs, retry guard) · swap
-enrichment calls. All candidate providers (Apollo, PDL, Hunter, FullEnrich, Firecrawl,
-Google Places, OpenRouter) already have services + playground pages (2026-07-12);
-which stages V1 runs is decided with the owner using `.claude/ENRICHMENT.md` + playground results.
+**Phase B2 — Enrichment backend** *(DONE 2026-07-12)*
+`EnrichmentService` runs the FULL old waterfall (owner decision — see ENRICHMENT.md
+"Phase B2 decisions"): Google Places ∥ website mining (Firecrawl + OpenRouter) →
+PDL/FullEnrich company + people search → per-contact waterfall (PDL email search →
+Hunter → PDL enrich via `preparePdlQuery` → FullEnrich inline-polled) → §4 score.
+Runs **synchronously inside `POST /api/leads/:id/enrich`** (30s–3min; the frontend
+holds the request; bulk = frontend loops 2 at a time). Retry guard: skip if attempts ≥ 3
+or COMPLETED < 30 days, unless `force` (the detail page's Re-enrich forces). Every
+provider call lands in `enrichment_responses`; each run writes one LeadCost row.
 
 **Phase B3 — Avatars & Templates backend**: HeygenService · avatar sync · template CRUD ·
 test video → R2 → real `/v/:token` + VideoEvents.

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { IEnrichmentResponse } from '~/app/types'
+import { ApiError } from '~/app/api/client'
 import { LeadsApi } from '~/app/api/leads.api'
 import { TemplatesApi } from '~/app/api/templates.api'
 
@@ -26,18 +28,45 @@ async function suppress() {
   toast.add({ title: 'Lead suppressed', description: 'Status set to Do not contact — campaigns will skip it.', color: 'warning' })
 }
 
+// Re-enrich forces past the 30-day/3-attempt guard and re-attempts charged contacts.
+// The request holds while the full waterfall runs (30s–3min).
 const enriching = ref(false)
 async function enrich() {
   enriching.value = true
   try {
-    await LeadsApi.enrich(id)
-    await refresh()
+    await LeadsApi.enrich(id, true)
     toast.add({ title: 'Lead enriched', color: 'success' })
+  }
+  catch (err) {
+    const e = err as ApiError
+    toast.add({ title: e.message || 'Enrichment failed', description: e.info ?? undefined, color: 'error' })
   }
   finally {
     enriching.value = false
+    // Partial results (and the FAILED status/error) are worth showing either way
+    await refresh()
+    if (responses.value !== null)
+      await loadResponses()
   }
 }
+
+// Activity tab: the per-provider-call audit ledger, loaded on first open
+const responses = ref<Array<IEnrichmentResponse> | null>(null)
+const responsesLoading = ref(false)
+async function loadResponses() {
+  responsesLoading.value = true
+  try {
+    responses.value = await LeadsApi.enrichmentResponses(id)
+  }
+  finally {
+    responsesLoading.value = false
+  }
+}
+const activeTab = ref('0')
+watch(activeTab, (v) => {
+  if (tabs[Number(v)]?.slot === 'activity' && responses.value === null && !responsesLoading.value)
+    loadResponses()
+})
 
 const konci = reactive({ konciCustomerId: '', demoPhone: '', demoPin: '' })
 watch(lead, (l) => {
@@ -69,6 +98,7 @@ const tabs = [
   { label: 'Emails', slot: 'emails', icon: 'i-lucide-mail' },
   { label: 'Notes', slot: 'notes', icon: 'i-lucide-sticky-note' },
   { label: 'Costs', slot: 'costs', icon: 'i-lucide-circle-dollar-sign' },
+  { label: 'Activity', slot: 'activity', icon: 'i-lucide-activity' },
 ]
 </script>
 
@@ -146,6 +176,7 @@ const tabs = [
                 <div class="text-xs text-muted">
                   {{ lead.enrichmentAttempts }} attempt(s) · last {{ formatDate(lead.lastEnrichedAt) }} · cost {{ formatUsd(lead.totalCostUsd) }}
                 </div>
+                <UAlert v-if="lead.enrichmentError" color="error" variant="subtle" icon="i-lucide-triangle-alert" :description="lead.enrichmentError" />
               </div>
             </UCard>
 
@@ -195,11 +226,11 @@ const tabs = [
           </div>
         </div>
 
-        <UTabs :items="tabs" variant="link">
+        <UTabs v-model="activeTab" :items="tabs" variant="link">
           <template #contacts>
             <UCard>
               <div v-if="!lead.contacts.length" class="text-sm text-muted py-6 text-center">
-                No contacts yet — enrichment finds decision-makers via Apollo.
+                No contacts yet — enrichment discovers staff on the website and decision-makers via PDL/Hunter/FullEnrich.
               </div>
               <div v-else class="divide-y divide-default">
                 <div v-for="c in lead.contacts" :key="c.id" class="py-3 flex items-center gap-4">
@@ -285,6 +316,38 @@ const tabs = [
                 </div>
                 <div class="py-2.5 flex justify-end gap-3 text-sm font-semibold">
                   <span>Total</span><span class="w-16 text-right">{{ formatUsd(lead.totalCostUsd) }}</span>
+                </div>
+              </div>
+            </UCard>
+          </template>
+
+          <template #activity>
+            <UCard>
+              <div v-if="responsesLoading" class="flex justify-center py-8">
+                <UIcon name="i-lucide-loader-circle" class="animate-spin size-5 text-muted" />
+              </div>
+              <div v-else-if="!responses?.length" class="text-sm text-muted py-6 text-center">
+                No provider calls recorded yet — they appear here after an enrichment run.
+              </div>
+              <div v-else class="flex flex-col gap-3">
+                <div v-for="r in responses" :key="r.id" class="border border-default rounded-lg p-3 flex flex-col gap-2">
+                  <div class="flex items-center gap-2 flex-wrap text-sm">
+                    <UIcon :name="r.success ? 'i-lucide-circle-check' : 'i-lucide-circle-x'" :class="r.success ? 'text-success' : 'text-error'" class="size-4" />
+                    <UBadge color="neutral" variant="outline" size="sm">
+                      {{ r.provider }}
+                    </UBadge>
+                    <span class="font-medium">{{ r.operation }}</span>
+                    <span class="text-xs text-muted ms-auto">
+                      {{ formatUsd(r.costUsd) }} · {{ (r.durationMs / 1000).toFixed(1) }}s · {{ formatDateTime(r.createdAt) }}
+                    </span>
+                  </div>
+                  <p v-if="r.error" class="text-xs text-error">
+                    {{ r.error }}
+                  </p>
+                  <div class="grid sm:grid-cols-2 gap-2">
+                    <RawJson :data="r.request" label="Request" />
+                    <RawJson :data="r.response" label="Response" />
+                  </div>
                 </div>
               </div>
             </UCard>

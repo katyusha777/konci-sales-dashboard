@@ -59,8 +59,6 @@ export const CSV_TARGET_FIELDS = [
   { key: 'postal_code', description: 'ZIP or postal code' },
   { key: 'country', description: 'Country' },
   { key: 'industry', description: 'Industry or business category' },
-  { key: 'lat', description: 'Latitude (decimal)' },
-  { key: 'lng', description: 'Longitude (decimal)' },
   // Google / enrichment data
   { key: 'google_id', description: 'Google Maps CID, Google Business ID, or unique Google identifier' },
   { key: 'place_id', description: 'Google Place ID (starts with ChIJ)' },
@@ -231,6 +229,60 @@ Only use values from the provided sourceHeaders list. Set a field to null if no 
       result[field.key] = val && input.headers.includes(val) ? val : null
     }
     return result
+  }
+
+  /**
+   * Given what we know about a person + their company, pick the optimal fields to
+   * send to PDL person enrich (drops generic/hurting fields — e.g. a very common
+   * first name with no last name and no domain). Used by the contact waterfall
+   * when no LinkedIn URL is known.
+   */
+  static async preparePdlQuery(env: Env, input: {
+    contact: { firstName?: string, lastName?: string, jobTitle?: string, email?: string }
+    company: { name: string, domain?: string, city?: string, state?: string }
+  }): Promise<{ firstName: string | null, lastName: string | null, company: string | null, domain: string | null, city: string | null, state: string | null, email: string | null }> {
+    const fieldSchema = (description: string) => ({ type: ['string', 'null'], description })
+    const { content } = await this.chat(env, MODELS.FLASH, [
+      {
+        role: 'system',
+        content: `You are a data enrichment specialist. Given what we know about a person and their company, select the optimal fields to query the PeopleDataLabs person enrichment API.
+Only include fields that will help narrow the match. Set fields to null if they are missing, too generic, or would hurt match accuracy (e.g. a very common first name with no last name and no domain).
+The goal is maximum likelihood of a correct match.`,
+      },
+      { role: 'user', content: JSON.stringify(input) },
+    ], 0, {
+      type: 'json_schema',
+      json_schema: {
+        name: 'pdl_query',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: {
+            first_name: fieldSchema('Contact first name, or null'),
+            last_name: fieldSchema('Contact last name, or null'),
+            company: fieldSchema('Company name, or null'),
+            company_domain: fieldSchema('Company website domain (no www/https), or null'),
+            location_city: fieldSchema('City, or null'),
+            location_state: fieldSchema('State abbreviation, or null'),
+            email: fieldSchema('Contact email if known, or null'),
+          },
+          required: ['first_name', 'last_name', 'company', 'company_domain', 'location_city', 'location_state', 'email'],
+          additionalProperties: false,
+        },
+      },
+    })
+
+    const parsed = JSON.parse(content) as Record<string, string | null>
+    const str = (v: string | null | undefined) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+    return {
+      firstName: str(parsed.first_name),
+      lastName: str(parsed.last_name),
+      company: str(parsed.company),
+      domain: str(parsed.company_domain),
+      city: str(parsed.location_city),
+      state: str(parsed.location_state),
+      email: str(parsed.email),
+    }
   }
 
   /**

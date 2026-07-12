@@ -48,6 +48,8 @@ The owner must always be able to read and manage this codebase himself. Therefor
 
 - DB: snake_case plural tables (`@@map`), snake_case columns (`@map`); renames are
   hand-written `ALTER TABLE ... RENAME` migrations (Prisma default drops data).
+- **All primary keys are UUIDv7**: `String @id @default(uuid(7)) @db.Uuid` — time-ordered
+  (rows sort by creation), generated client-side by Prisma. Every new table follows this.
 - Prisma CLI uses `apps/api/.env` (direct Neon URL); runtime uses `.dev.vars` / Worker
   secret (pooler URL).
 - Deploy: `pnpm run deploy` from root (`run` is required), or `pnpm deploy:api|worker|frontend`.

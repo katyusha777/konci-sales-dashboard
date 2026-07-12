@@ -63,9 +63,9 @@ explanation so they don't become orphan code:
 
 | Phase | What | Old-repo reference (exact path) | Why not now |
 |---|---|---|---|
-| B1 | Dedup logic: `domainKey()` normalization, shared-platform set, googleId → domain → name+city key waterfall, contact upsert | `apps/api/src/leads/leads.service.ts` | needs the Lead/Contact tables |
-| B1 | LLM dedup as fuzzy fallback (`deduplicateLead`) | `packages/llm/src/index.ts` | plan dedups deterministically first; decide later if fuzzy is needed |
-| B2 | Enrichment orchestration + batch auto-halving loop + `preparePdlQuery` / `validateEnrichmentResults` | `apps/worker/src/trigger/enrichment.task.ts`, `reverse-email-batch.task.ts` (spec: ENRICHMENT.md) | needs EnrichmentService + LeadCost ledger |
+| ~~B1~~ | ~~Dedup logic~~ **DONE 2026-07-12** → `LeadService` (`lead.service.ts`): domainKey via `lib/website.ts`, googlePlaceId → domain → name+city waterfall, contact upsert in `enrichment.service.ts` | `apps/api/src/leads/leads.service.ts` | — |
+| B1 | LLM dedup as fuzzy fallback (`deduplicateLead`) | `packages/llm/src/index.ts` | still open — deterministic dedup shipped; add fuzzy only if real dupes appear |
+| ~~B2~~ | ~~Enrichment orchestration + `preparePdlQuery`~~ **DONE 2026-07-12** → `EnrichmentService` (sync, full waterfall; `validateEnrichmentResults` decided against; reverse-email BATCH auto-halving loop still unported — only needed for bulk email-only imports) | `apps/worker/src/trigger/enrichment.task.ts`, `reverse-email-batch.task.ts` (spec: ENRICHMENT.md) | — |
 | B3 | Video render pipeline: dual path (studio template + scenes vs avatar+script), poll 30×30s, then download → R2 (NOT Mux) | `apps/worker/src/trigger/render-video.task.ts`, `test-video.task.ts` | needs Video table + R2 binding + cron worker |
 | B4 | Resend webhooks: svix verify, event→status map, idempotency by externalId (catch P2002), hard-bounce/complaint → auto-suppress | `apps/api/src/webhooks/resend.controller.ts` | needs Email/EmailEvent tables |
 | B4 | Send rate limiting (concurrency 2 ≈ Resend 2 req/s) + retry backoff | `apps/worker/src/trigger/send-outreach.task.ts` | needs campaign scheduler |

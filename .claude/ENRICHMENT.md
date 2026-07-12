@@ -139,7 +139,7 @@ enrichment only where discovery found something worth chasing.
 
 | Old repo | New dashboard |
 |---|---|
-| Trigger.dev task, 970-line waterfall | Same waterfall logic, to be rebuilt as `EnrichmentService` + cron worker (Phase B2) |
+| Trigger.dev task, 970-line waterfall | Same waterfall logic in `EnrichmentService`, run synchronously per request (built 2026-07-12 — see "Phase B2 decisions" below) |
 | `LeadEnrichmentRun` / `LeadResearchSnapshot` / `LeadResearchFact` tables | **Dropped.** Results land on the Lead/Contact rows + `LeadCost` ledger |
 | Langfuse tracing, zod validation, PII masking in the LLM package | **Dropped.** Plain fetch + minimal parsing in `OpenrouterService` |
 | LLM "validation + one-shot retry" quality step (Step 5) | **Not ported (yet)** — revisit when the real flow is built |
@@ -363,8 +363,8 @@ POST /openrouter/select-pages  POST /openrouter/extract
 | Old method | Fits | Status |
 |---|---|---|
 | `extractSignals`, `selectPagesToScrape` | enrichment | ✅ ported to `OpenrouterService` |
-| `preparePdlQuery` | enrichment Step 4 (LLM picks PDL query fields) | port in Phase B2 with the waterfall |
-| `validateEnrichmentResults` | enrichment Step 5 (quality retry) | open decision — may not earn its complexity |
+| `preparePdlQuery` | enrichment Step 4 (LLM picks PDL query fields) | ✅ ported to `OpenrouterService.preparePdlQuery` (2026-07-12, B2) |
+| `validateEnrichmentResults` | enrichment Step 5 (quality retry) | ❌ decided against (B2, 2026-07-12) — didn't earn its complexity |
 | `mapCsvHeaders` | Phase B1 CSV import column mapping | ✅ ported to `OpenrouterService.mapCsvHeaders` (2026-07-12, live-tested — see OLD_REPO_AUDIT.md §1) |
 | `deduplicateLead` | B1 import dedup | plan dedups deterministically (domain/place-id); LLM only as fuzzy fallback if ever needed |
 | `parseDiscoveryQuery` | natural-language "Find leads" search | nice-to-have, post-V1; the plan's structured search form covers V1 |
@@ -379,14 +379,33 @@ fields we'd skipped — `googleId`/`placeId` (separate, for the `googlePlaceId` 
 
 **`packages/telephony`** — ported to `JambonzService`; see `.claude/TELEPHONY.md`.
 
-## Open decisions for Phase B2 (the real `EnrichmentService`)
+## Phase B2 decisions (resolved 2026-07-12 with the owner — implemented in `enrichment.service.ts`)
 
-- Which stages does V1 actually run? The plan's minimal take (§4: Scrap.io refresh +
-  Apollo match) vs the full old waterfall — now that all providers have services, this is
-  a product/cost decision, not a code one. Playground testing should inform it.
-- Where the scrape/extract results live now that `LeadResearchSnapshot`/`Fact` are
-  dropped — candidates: `Lead.services[]`/`businessHours`/`description` only, discard raw
-  markdown.
-- Whether the LLM validation/retry step (old Step 5) earns its complexity.
-- FullEnrich polling in the cron worker: submit on tick N, collect on tick N+1
-  (fits the 5-min scheduler; no 30 s inline waits).
+- **V1 runs the FULL waterfall** (all stages above, Apollo excluded — person match is
+  plan-gated; PDL is the primary). Scrap.io refresh is out until the subscription has
+  API access; leads are manually input or CSV-imported, so Google Places is the identity
+  source and its canonical website is now **gap-filled onto the lead** (and scraped when
+  the lead had no website) — a small extension over the old flow, which never applied
+  Google's website.
+- **Execution is synchronous inside `POST /api/leads/:id/enrich`** (30s–3min; the
+  frontend holds the request open; bulk enrich = frontend loops 2 at a time). No queue,
+  no cron state. FullEnrich submit+poll happens **inline** (~3s × 10) — the cron-worker
+  split-tick idea is dead.
+- **Where results live**: business facts land on the Lead row
+  (`industry/services/businessHours/description/ownerName`), people land on Contacts
+  (`confidence`, `enrichedAt` added), raw markdown is discarded — but every provider
+  call (request + raw response + cost + duration) is dumped into
+  **`enrichment_responses`** (one clean audit table, owner request; lead detail
+  "Activity" tab). Money: one `LeadCost` ENRICHMENT row per run (sum + per-provider
+  breakdown in meta) + denormalized `lead.totalCostUsd`.
+- **Old Step 5 (LLM validation + retry) is NOT ported** — didn't earn its complexity;
+  revisit only if extraction quality disappoints in practice.
+- **Redirect-based canonical-domain detection is not ported** (our `FirecrawlService`
+  doesn't expose the post-redirect final URL); the LLM's `canonicalDomain` covers the
+  rebrand/DBA case.
+- **Statuses**: a run that finishes is COMPLETED regardless of score (the score is shown
+  separately); an exception → FAILED with `enrichmentError` on the lead. Retry guard:
+  skip when attempts ≥ 3 or COMPLETED < 30 days — `force` (the Re-enrich button)
+  bypasses and nulls contacts' `enrichedAt`.
+- The 7-day per-stage freshness cache collapsed into that single 30-day whole-run guard —
+  without snapshot tables there's no per-stage timestamp worth tracking.

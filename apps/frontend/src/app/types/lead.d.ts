@@ -36,6 +36,7 @@ export interface ILead {
   enrichmentScore: number
   enrichmentAttempts: number
   lastEnrichedAt: string | null
+  enrichmentError: string | null
   assignedTo: string | null
   lastContactedAt: string | null
   lastEngagedAt: string | null
@@ -46,6 +47,9 @@ export interface ILead {
   createdAt: string
   updatedAt: string
 }
+
+// Where a contact was discovered (waterfall providers included)
+export type TContactSource = 'CSV' | 'SCRAPIO' | 'APOLLO' | 'MANUAL' | 'WEBSITE' | 'PDL' | 'HUNTER' | 'FULLENRICH'
 
 export interface IContact {
   id: string
@@ -58,7 +62,8 @@ export interface IContact {
   linkedinUrl: string | null
   priority: number
   emailStatus: TContactEmailStatus
-  source: TLeadSource | 'APOLLO'
+  source: TContactSource
+  confidence: number | null
 }
 
 export interface ILeadNote {
@@ -100,6 +105,44 @@ export interface ILeadDetail extends ILead {
   emails: Array<IEmailSummary>
 }
 
+// Manual "Add lead" form
+export interface ILeadCreate {
+  name: string
+  website?: string
+  email?: string
+  phone?: string
+  street?: string
+  city?: string
+  state?: string
+  postalCode?: string
+  country?: string
+  industry?: string
+  notes?: string
+}
+
+export type TEnrichmentProvider = 'GOOGLE_PLACES' | 'FIRECRAWL' | 'OPENROUTER' | 'PDL' | 'HUNTER' | 'FULLENRICH' | 'APOLLO' | 'SCRAPIO'
+
+// One provider call from an enrichment run (the audit ledger — Activity tab)
+export interface IEnrichmentResponse {
+  id: string
+  provider: TEnrichmentProvider
+  operation: string
+  success: boolean
+  error: string | null
+  costUsd: number
+  durationMs: number
+  createdAt: string
+  request: unknown
+  response: unknown
+}
+
+// CSV import result
+export interface IImportReport {
+  created: number
+  duplicates: number
+  errors: Array<{ row: number, error: string }>
+}
+
 export interface ILeadFilters {
   search?: string
   status?: TLeadStatus
@@ -123,14 +166,31 @@ export interface IScrapioSearchParams {
   minReviews: number | null
 }
 
+// Mirrors the API's ScrapioResult (services/scrapio.service.ts) — the search
+// endpoint returns the full mapped place so import loses nothing.
 export interface IScrapioResult {
   externalId: string
+  googleId: string | null
+  placeId: string | null
   name: string
-  city: string
-  state: string
-  industry: string
-  rating: number
-  reviewCount: number
   website: string | null
   phone: string | null
+  email: string | null
+  street: string | null
+  city: string | null
+  state: string | null
+  postalCode: string | null
+  country: string | null
+  lat: number | null
+  lng: number | null
+  industry: string | null
+  categories: Array<string>
+  rating: number | null
+  reviewCount: number | null
+  priceRange: string | null
+  isClaimed: boolean | null
+  isPermanentlyClosed: boolean | null
+  socialLinks: Record<string, string> | null
+  technologies: Array<string>
+  raw: unknown
 }
