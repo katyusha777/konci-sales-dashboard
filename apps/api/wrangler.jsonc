@@ -6,7 +6,18 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
-  }
+  },
+  // The api Worker serves HTTP (Hono `fetch`) AND runs the scheduler (`scheduled`):
+  // every 5 min it does campaign sends + video polling (see src/scheduler.ts).
+  "triggers": {
+    // UTC. One trigger runs both ticks sequentially.
+    "crons": ["*/5 * * * *"]
+  },
+  // Generated avatar videos: downloaded from HeyGen → stored here → streamed via /api/v/:token/stream.
+  // Local `wrangler dev` simulates this bucket; prod needs: wrangler r2 bucket create konci-videos
+  "r2_buckets": [
+    { "binding": "VIDEOS", "bucket_name": "konci-videos" }
+  ]
   // Secrets (e.g. DATABASE_URL) live in .dev.vars locally and are set in
   // production with: wrangler secret put DATABASE_URL
 }

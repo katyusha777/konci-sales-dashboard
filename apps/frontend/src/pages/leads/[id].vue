@@ -3,6 +3,7 @@ import type { IEnrichmentResponse } from '~/app/types'
 import { ApiError } from '~/app/api/client'
 import { LeadsApi } from '~/app/api/leads.api'
 import { TemplatesApi } from '~/app/api/templates.api'
+import { VideosApi } from '~/app/api/video.api'
 
 const route = useRoute()
 const toast = useToast()
@@ -16,10 +17,22 @@ const videoTemplateOptions = computed(() => (templates.value ?? [])
   .filter(t => t.videoScript !== null || t.heygenTemplateId)
   .map(t => ({ label: t.name, value: t.id })))
 const testVideoTemplateId = ref<string | undefined>()
+const generatingTestVideo = ref(false)
 
-function generateTestVideo() {
-  const name = videoTemplateOptions.value.find(o => o.value === testVideoTemplateId.value)?.label
-  toast.add({ title: `Test video queued (simulated)`, description: `Template: ${name} — real HeyGen rendering arrives with the avatars backend.`, color: 'info' })
+async function generateTestVideo() {
+  if (!testVideoTemplateId.value)
+    return
+  generatingTestVideo.value = true
+  try {
+    await VideosApi.generateTest(id, testVideoTemplateId.value)
+    toast.add({ title: 'Test video queued', description: 'HeyGen is rendering it — it will appear here once the scheduler downloads it.', color: 'success' })
+  }
+  catch (err) {
+    toast.add({ title: 'Could not queue video', description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    generatingTestVideo.value = false
+  }
 }
 
 async function suppress() {
@@ -208,7 +221,7 @@ const tabs = [
                 <UFormField label="Template" size="sm">
                   <USelectMenu v-model="testVideoTemplateId" value-key="value" :items="videoTemplateOptions" placeholder="Pick a video template" class="w-full" />
                 </UFormField>
-                <UButton size="sm" icon="i-lucide-clapperboard" label="Generate test video" :disabled="!testVideoTemplateId" @click="generateTestVideo" />
+                <UButton size="sm" icon="i-lucide-clapperboard" label="Generate test video" :loading="generatingTestVideo" :disabled="!testVideoTemplateId" @click="generateTestVideo" />
               </div>
             </UCard>
 

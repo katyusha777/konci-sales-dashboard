@@ -26,8 +26,8 @@
 
 | App | Stack | Deployed | Role |
 |---|---|---|---|
-| `apps/api` | Hono + Prisma (Neon PG) on CF Workers | konci-api.patrickdeamorim.workers.dev | All business logic, REST `/api/*` |
-| `apps/worker` | CF Worker, cron triggers | konci-worker.patrickdeamorim.workers.dev | Scheduler: campaign sends, video polling |
+| `apps/api` | Hono + Prisma (Neon PG) on CF Workers | konci-api.patrickdeamorim.workers.dev | All business logic, REST `/api/*`, **AND the scheduler** (`scheduled` export, every-5-min crons — see §5) |
+| `apps/worker` | CF Worker, cron triggers | konci-worker.patrickdeamorim.workers.dev | **RETIRED 2026-07-12** — scheduler folded into `apps/api`; kept only so the deployment isn't orphaned |
 | `apps/frontend` | Nuxt 4 (Vue 3) on CF Pages | konci-frontend.pages.dev | Dashboard UI + public video page |
 
 Replaces from the old repo: NestJS→Hono, Next.js→Nuxt, Trigger.dev→cron worker + DB queue,
@@ -197,16 +197,20 @@ Copy the good integration code from the old repo, cleaned into our static-class 
 | `GooglePlacesService` | `packages/enrichment/src/business/google-places.service.ts` | *(added 2026-07-12)* query-param auth. findplace → details two-step, generic-type filtering. |
 | `OpenrouterService` | `packages/llm/src/index.ts` (subset) | *(added 2026-07-12)* Bearer, plain fetch — no SDK/zod/Langfuse. Only the two enrichment functions: `selectPagesToScrape`, `extractSignals`. Disposition of the rest of the old LLM package: `.claude/ENRICHMENT.md` §"Old packages disposition". |
 | `JambonzService` | `packages/telephony/src/jambonz.adapter.ts` | *(added 2026-07-12)* Bearer. Read-only pool/agent lists (verified) + custom trial provision/release (untested — old repo never left mock mode). Mock adapter + provider factory dropped. See `.claude/TELEPHONY.md`. |
-| `CampaignService` | rewrite (old `workflow-run.task.ts` is the reference) | Add/remove leads, launch/pause, compute `nextSendAt`, template rendering (`{{var}}` substitution + missing-var validation). |
-| `VideoService` | — | Create Video row + trigger HeygenService; download completed video → R2; token pages. |
+| `CampaignService` | rewrite (old `workflow-run.task.ts` is the reference) | *(DONE B4)* create (steps + enrollment + best-contact + withVideo top-N), list/detail (computed stats), setStatus, `runSendTick`. Rendering lives in shared `lib/template-render.ts`; the "emailable?" rule in `lib/emailable.ts`. |
+| `VideoService` | — | *(DONE B3)* dual-path generate via HeygenService; `runPollTick` downloads completed video → R2; public page/stream/events by `token`. |
 
 **Enrichment score (keep it dumb and transparent, 0–100):** has website +15, has email +15,
 has phone +10, google rating ≥ 4.0 +10, review count ≥ 20 +10, has ≥1 contact with valid
 email +25, industry known +5, socials found +10. Threshold to auto-include in campaigns: ≥ 60.
 
-## 5. Scheduler (apps/worker) — replaces Trigger.dev
+## 5. Scheduler (in `apps/api`) — replaces Trigger.dev
 
-Cron ticks (wrangler `triggers.crons`), all idempotent, all DB-driven:
+**Built 2026-07-12 (B4).** The scheduler lives in the **api Worker**, which exports both
+`fetch` (Hono) and `scheduled` (`src/index.ts` → `src/scheduler.ts` → `runCronTick`); crons
+are in `apps/api/wrangler.jsonc` (`*/5 * * * *`). `apps/worker` was retired (its cron
+removed) to avoid a second Prisma bundle + cross-app imports. `runCronTick` runs both ticks
+under `Promise.allSettled` so one failing can't abort the other. Ticks (idempotent, DB-driven):
 
 - **Every 5 min — campaign sends**: for each ACTIVE campaign, count emails sent in the last
   hour/day vs `maxSendsPerHour/Day`; take due `campaign_leads` (`status IN (PENDING, SCHEDULED)
@@ -328,14 +332,26 @@ holds the request; bulk = frontend loops 2 at a time). Retry guard: skip if atte
 or COMPLETED < 30 days, unless `force` (the detail page's Re-enrich forces). Every
 provider call lands in `enrichment_responses`; each run writes one LeadCost row.
 
-**Phase B3 — Avatars & Templates backend**: HeygenService · avatar sync · template CRUD ·
-test video → R2 → real `/v/:token` + VideoEvents.
+**Phase B3 — Avatars & Templates backend** *(DONE 2026-07-12)*
+`AvatarService` (sync from HeyGen — upsert by heygenAvatarId, never clobber owner-set
+voice/active) · `TemplateService` (CRUD; `videoScenes []↔null` maps the frontend's video
+mode; `/heygen` lists studio templates with per-template scene counts) · `VideoService`
+(dual-path generate → **cron poll → download → R2** → `COMPLETED`; public `/api/v/:token`
+page data + Range-aware byte **stream** + VideoEvents). Real `/v/:token` page + unsubscribe
+page wired. "Generate test video" buttons (lead detail + templates) call `POST /api/videos`.
 
-**Phase B4 — Campaigns backend**: campaign CRUD · EmailService (Resend + test mode) ·
-worker scheduler (rate limits, video polling) · Resend webhooks → EmailEvent +
-auto-suppression · unsubscribe.
+**Phase B4 — Campaigns backend** *(DONE 2026-07-12)*
+`CampaignService` (create = steps + lead enrollment picking each lead's best emailable
+contact + `withVideo` top-N by score; list/detail with computed stats; setStatus) · send
+**tick** (rate-limited by counting sent Emails in the hour/day window; renders template via
+the shared `lib/template-render.ts`; `EmailService.send` test-mode redirect; advances the
+drip) · `WebhookService` (Resend, **inline HMAC-SHA256** — no svix dep; event→EmailEvent,
+P2002 idempotency, hard-bounce/complaint/unsub → `suppressContact`) · unsubscribe endpoint ·
+`StatsService` real dashboard overview. **Scheduler runs in the api Worker** (`scheduled`
+export + `triggers.crons` every 5 min; `apps/worker` retired — see §2/§5).
 
-**Phase B5 — Stats & polish**: real dashboard queries · CSV export · failure alerting.
+**Phase B5 — Stats & polish**: dashboard queries **DONE in B4** (`StatsService`) · remaining:
+CSV export · failure alerting.
 
 **Later (explicitly out of V1):** Konci platform API integration (auto-provision demo
 number/PIN, call + PIN-entry tracking — likely APIs or direct DB access, TBD by Konci) ·

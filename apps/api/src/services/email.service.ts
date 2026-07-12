@@ -22,12 +22,14 @@ export interface SendEmailResult {
 export abstract class EmailService {
   /**
    * RFC 8058 one-click unsubscribe headers (Gmail/Yahoo require these for bulk senders).
-   * Campaign sends (Phase B4) pass the Email row's trackingToken as unsubscribeToken —
-   * the URL resolves to the public /unsubscribe/{token} page. Merge into send() headers.
+   * Campaign sends (Phase B4) pass the Email row's trackingToken as unsubscribeToken.
+   * The List-Unsubscribe URL points at the API endpoint so mailbox providers can POST
+   * the one-click unsubscribe directly; humans who click the in-body {{unsubscribe_url}}
+   * land on the frontend /unsubscribe/{token} confirmation page (which calls the same API).
    */
   static buildListUnsubscribeHeaders(env: Env, unsubscribeToken: string): Record<string, string> {
     return {
-      'List-Unsubscribe': `<${env.APP_URL}/unsubscribe/${unsubscribeToken}>`,
+      'List-Unsubscribe': `<${env.APP_URL}/api/unsubscribe/${unsubscribeToken}>`,
       'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       'X-Entity-Ref-ID': unsubscribeToken,
     }

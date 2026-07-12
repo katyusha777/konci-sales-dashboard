@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import type { ITemplate } from '~/app/types'
+import { ApiError } from '~/app/api/client'
 import { AvatarsApi } from '~/app/api/avatars.api'
+import { LeadsApi } from '~/app/api/leads.api'
 import { TemplatesApi } from '~/app/api/templates.api'
-import { TEMPLATE_PLACEHOLDERS } from '~/app/dummy-data/templates'
+import { VideosApi } from '~/app/api/video.api'
+import { TEMPLATE_PLACEHOLDERS } from '~/app/constants/template'
 
 const toast = useToast()
 
 const { data: templates, refresh } = await useAsyncData('templates.list', () => TemplatesApi.list())
 const { data: avatars } = await useAsyncData('avatars.list', () => AvatarsApi.list())
 const { data: heygenTemplates } = await useAsyncData('templates.heygen', () => TemplatesApi.heygenTemplates())
+// A sample lead to render the test video's placeholders against.
+const { data: sampleLeads } = await useAsyncData('templates.sampleleads', () => LeadsApi.list({ perPage: 1 }))
 
 const selectedId = ref<string | null>(null)
 const draft = ref<ITemplate | null>(null)
@@ -144,6 +149,30 @@ async function save() {
   draft.value = structuredClone(saved)
   toast.add({ title: 'Template saved', color: 'success' })
 }
+
+const generatingTestVideo = ref(false)
+async function generateTestVideo() {
+  if (!draft.value?.id) {
+    toast.add({ title: 'Save the template first', description: 'A test video renders against the saved template.', color: 'info' })
+    return
+  }
+  const sampleLead = sampleLeads.value?.items[0]
+  if (!sampleLead) {
+    toast.add({ title: 'No lead to sample', description: 'Add a lead first — the video needs a business to personalize for.', color: 'warning' })
+    return
+  }
+  generatingTestVideo.value = true
+  try {
+    await VideosApi.generateTest(sampleLead.id, draft.value.id)
+    toast.add({ title: 'Test video queued', description: `Rendering for ${sampleLead.name} — it appears on that lead once HeyGen finishes.`, color: 'success' })
+  }
+  catch (err) {
+    toast.add({ title: 'Could not queue video', description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    generatingTestVideo.value = false
+  }
+}
 </script>
 
 <template>
@@ -244,7 +273,7 @@ async function save() {
               <UButton label="Save" :disabled="!draft.name || missingVars.length > 0" @click="save" />
               <UButton
                 v-if="videoMode !== 'none'" icon="i-lucide-clapperboard" color="neutral" variant="outline" label="Generate test video"
-                @click="toast.add({ title: 'Test video simulated', description: 'Real HeyGen rendering arrives with the avatars backend.', color: 'info' })"
+                :loading="generatingTestVideo" @click="generateTestVideo"
               />
             </div>
           </div>

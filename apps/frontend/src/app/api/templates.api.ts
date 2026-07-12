@@ -1,28 +1,17 @@
 import type { IHeygenTemplate, ITemplate } from '~/app/types'
-import { dummyHeygenTemplates, dummyTemplates } from '~/app/dummy-data/templates'
-import { dummy } from './client'
+import { $api } from './client'
 
-// DUMMY-BACKED (frontend-first phase).
 export abstract class TemplatesApi {
   static list(): Promise<Array<ITemplate>> {
-    return dummy(dummyTemplates)
+    return $api('/api/templates')
   }
 
   static heygenTemplates(): Promise<Array<IHeygenTemplate>> {
-    return dummy(dummyHeygenTemplates, 150)
+    return $api('/api/templates/heygen')
   }
 
-  static async save(template: ITemplate): Promise<ITemplate> {
-    const index = dummyTemplates.findIndex(t => t.id === template.id)
-    const saved = { ...template, updatedAt: new Date().toISOString() }
-    if (index >= 0) {
-      dummyTemplates[index] = saved
-    }
-    else {
-      saved.id = `tpl_${Date.now()}`
-      saved.createdAt = saved.updatedAt
-      dummyTemplates.unshift(saved)
-    }
-    return dummy(saved, 300)
+  // Insert (no id) or update (id present) — the backend routes on id presence.
+  static save(template: ITemplate): Promise<ITemplate> {
+    return $api('/api/templates', { method: 'POST', body: template })
   }
 }

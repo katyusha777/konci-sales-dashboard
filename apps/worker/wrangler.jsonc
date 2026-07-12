@@ -4,11 +4,11 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
-  "triggers": {
-    // All cron schedules run in UTC
-    "crons": ["0 2 * * *"]
-  },
   "observability": {
     "enabled": true
   }
+  // RETIRED (2026-07-12): the scheduler moved into the api Worker, which exports both
+  // `fetch` (HTTP) and `scheduled` (the every-5-min campaign-send + video-poll ticks) —
+  // see apps/api/src/scheduler.ts and apps/api/wrangler.jsonc `triggers.crons`. This app
+  // no longer runs any cron; kept only so an existing deployment isn't orphaned.
 }

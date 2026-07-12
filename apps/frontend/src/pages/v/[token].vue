@@ -1,9 +1,43 @@
 <script setup lang="ts">
+import { VideosApi } from '~/app/api/video.api'
+
 definePageMeta({ layout: 'public' })
 
-// Dummy-phase public video landing page: any token shows the sample lead.
-const playing = ref(false)
-const demo = { businessName: 'Lonestar Dental Care', phone: '+1 (512) 555-9876', pin: '4821' }
+const route = useRoute()
+const token = route.params.token as string
+
+const { data: page } = await useAsyncData(`video.${token}`, () => VideosApi.page(token).catch(() => null))
+
+const videoEl = ref<HTMLVideoElement | null>(null)
+const streamUrl = computed(() => VideosApi.streamUrl(token))
+
+// Fire each engagement event once. PROGRESS_25/50/75 as the viewer crosses each quartile.
+const fired = new Set<string>()
+function fire(type: string, positionSeconds?: number) {
+  if (fired.has(type))
+    return
+  fired.add(type)
+  VideosApi.event(token, type, positionSeconds).catch(() => {})
+}
+
+onMounted(() => {
+  if (page.value)
+    fire('PAGE_VIEW')
+})
+
+function onTimeUpdate() {
+  const el = videoEl.value
+  if (!el || !el.duration)
+    return
+  const pct = (el.currentTime / el.duration) * 100
+  const pos = Math.round(el.currentTime)
+  if (pct >= 25)
+    fire('PROGRESS_25', pos)
+  if (pct >= 50)
+    fire('PROGRESS_50', pos)
+  if (pct >= 75)
+    fire('PROGRESS_75', pos)
+}
 </script>
 
 <template>
@@ -13,43 +47,60 @@ const demo = { businessName: 'Lonestar Dental Care', phone: '+1 (512) 555-9876',
       Konci
     </div>
 
-    <UCard :ui="{ body: 'p-0 sm:p-0' }">
-      <!-- Video player (dummy) -->
-      <div class="aspect-video bg-zinc-900 rounded-t-lg flex items-center justify-center relative">
-        <template v-if="!playing">
-          <UButton icon="i-lucide-play" size="xl" class="rounded-full" aria-label="Play" @click="playing = true" />
-        </template>
+    <UCard v-if="page" :ui="{ body: 'p-0 sm:p-0' }">
+      <div class="aspect-video bg-zinc-900 rounded-t-lg overflow-hidden flex items-center justify-center">
+        <video
+          v-if="page.ready"
+          ref="videoEl"
+          :src="streamUrl"
+          controls
+          playsinline
+          class="w-full h-full"
+          @play="fire('PLAY')"
+          @pause="fire('PAUSE')"
+          @timeupdate="onTimeUpdate"
+          @ended="fire('COMPLETED')"
+        />
         <p v-else class="text-white/70 text-sm px-8 text-center">
-          ▶ Playing the personalized video for {{ demo.businessName }}… (real player streams from R2 with play/progress tracking)
+          Your personalized video is still rendering — check back in a minute.
         </p>
       </div>
 
       <div class="p-6 flex flex-col gap-4 text-center">
         <h1 class="text-xl font-semibold">
-          {{ demo.businessName }}, meet your AI receptionist
+          {{ page.businessName }}, meet your AI receptionist
         </h1>
         <p class="text-sm text-muted">
           We already set it up. Call your demo line and talk to it right now:
         </p>
-        <div class="flex items-center justify-center gap-4">
+        <div v-if="page.demoPhone" class="flex items-center justify-center gap-4">
           <div class="border border-default rounded-lg px-4 py-2">
             <div class="text-xs text-muted">
               Call
             </div>
             <div class="font-semibold">
-              {{ demo.phone }}
+              {{ page.demoPhone }}
             </div>
           </div>
-          <div class="border border-default rounded-lg px-4 py-2">
+          <div v-if="page.demoPin" class="border border-default rounded-lg px-4 py-2">
             <div class="text-xs text-muted">
               PIN
             </div>
             <div class="font-semibold tracking-widest">
-              {{ demo.pin }}
+              {{ page.demoPin }}
             </div>
           </div>
         </div>
         <UButton size="lg" label="Get this for your business" trailing-icon="i-lucide-arrow-right" class="self-center" />
+      </div>
+    </UCard>
+
+    <UCard v-else>
+      <div class="p-6 text-center text-muted">
+        <UIcon name="i-lucide-video-off" class="size-8 mx-auto mb-2" />
+        <p class="text-sm">
+          This video link is not valid or has expired.
+        </p>
       </div>
     </UCard>
   </div>

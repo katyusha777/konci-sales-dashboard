@@ -17,8 +17,11 @@ phase / what to ignore).
 
 - `apps/api` — Hono + Prisma (Neon) on CF Workers. Laravel-style: class controllers
   extending `lib/controller.ts` (`this.data()/success()/error()`), routes bind with
-  `action(Controller, 'method')`, static Service classes in `src/services/`.
-- `apps/worker` — CF Worker cron: campaign scheduler, video polling.
+  `action(Controller, 'method')`, static Service classes in `src/services/`. The Worker
+  exports **both** `fetch` (Hono) and `scheduled` (the every-5-min scheduler —
+  `src/scheduler.ts`); it also has an R2 bucket binding `VIDEOS` for generated videos.
+- `apps/worker` — **RETIRED** (scheduler moved into `apps/api`). No cron; kept only so the
+  existing deployment isn't orphaned.
 - `apps/frontend` — Nuxt 4 + Nuxt UI v4 on CF Pages. See `.claude/FRONTEND.md` for the
   UI/API-layer/design conventions before touching it.
 

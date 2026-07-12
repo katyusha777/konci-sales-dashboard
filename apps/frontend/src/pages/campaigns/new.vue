@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ApiError } from '~/app/api/client'
 import { CampaignsApi } from '~/app/api/campaigns.api'
 import { LeadsApi } from '~/app/api/leads.api'
 import { TemplatesApi } from '~/app/api/templates.api'
@@ -29,15 +30,37 @@ const { data: leadPool } = await useAsyncData('campaigns.leadpool', () => LeadsA
 const templateOptions = computed(() => (templates.value ?? []).map(t => ({ label: t.name, value: t.id })))
 const eligibleLeads = computed(() => (leadPool.value?.items ?? []).filter(l => !['DO_NOT_CONTACT', 'CLOSED_WON', 'CLOSED_LOST'].includes(l.status)))
 
+const creating = ref(false)
 async function launch() {
-  const campaign = await CampaignsApi.create({
-    name: form.name,
-    description: form.description,
-    maxSendsPerHour: form.maxSendsPerHour,
-    maxSendsPerDay: form.maxSendsPerDay,
-  })
-  toast.add({ title: `Campaign "${campaign.name}" created as draft`, description: `${form.leadIds.length} leads, ${form.sequence.length} steps (simulated)`, color: 'success' })
-  await navigateTo('/campaigns')
+  const steps = form.sequence.filter(s => s.templateId).map(s => ({ templateId: s.templateId!, delayDays: s.delayDays }))
+  if (!steps.length) {
+    toast.add({ title: 'Add at least one email', description: 'Pick a template for the initial send.', color: 'warning' })
+    return
+  }
+  if (!form.leadIds.length) {
+    toast.add({ title: 'Select at least one lead', color: 'warning' })
+    return
+  }
+  creating.value = true
+  try {
+    const campaign = await CampaignsApi.create({
+      name: form.name,
+      description: form.description,
+      maxSendsPerHour: form.maxSendsPerHour,
+      maxSendsPerDay: form.maxSendsPerDay,
+      steps,
+      leadIds: form.leadIds,
+      videoTopN: form.videoTopN,
+    })
+    toast.add({ title: `Campaign "${campaign.name}" created as draft`, description: `${campaign.stats.leads} leads enrolled, ${steps.length} steps. Activate it from the campaign page.`, color: 'success' })
+    await navigateTo(`/campaigns/${campaign.id}`)
+  }
+  catch (err) {
+    toast.add({ title: 'Could not create campaign', description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    creating.value = false
+  }
 }
 </script>
 
@@ -144,7 +167,7 @@ async function launch() {
           <UButton v-if="stepper > 0" color="neutral" variant="outline" label="Back" @click="stepper--" />
           <span v-else />
           <UButton v-if="stepper < 3" label="Continue" :disabled="stepper === 0 && !form.name" @click="stepper++" />
-          <UButton v-else icon="i-lucide-rocket" label="Create campaign" @click="launch" />
+          <UButton v-else icon="i-lucide-rocket" label="Create campaign" :loading="creating" @click="launch" />
         </div>
       </div>
     </template>
