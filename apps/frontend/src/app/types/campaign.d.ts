@@ -54,6 +54,14 @@ export interface ICampaignDetail extends ICampaign {
   leads: Array<ICampaignLead>
 }
 
+// What a scheduler tick did (manual "Run scheduler now" or the cron).
+export interface ITickSummary {
+  emailsSent: number
+  videosCompleted: number
+  videosFailed: number
+  videosProcessing: number
+}
+
 // Create-wizard payload: the backend builds CampaignStep rows and enrolls the leads
 // (best emailable contact each; top-N by score flagged withVideo).
 export interface ICampaignCreate {

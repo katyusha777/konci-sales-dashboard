@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { ICampaignLead } from '~/app/types'
+import type { ICampaignLead, TCampaignStatus } from '~/app/types'
 import { CampaignsApi } from '~/app/api/campaigns.api'
+import { ApiError } from '~/app/api/client'
+import { SchedulerApi } from '~/app/api/scheduler.api'
 
 const route = useRoute()
 const toast = useToast()
@@ -9,13 +11,92 @@ const id = route.params.id as string
 
 const { data: campaign, status, refresh } = await useAsyncData(`campaigns.${id}`, () => CampaignsApi.get(id))
 
-async function toggle() {
+// Activate a DRAFT/PAUSED campaign, or pause an ACTIVE one.
+const settingStatus = ref(false)
+async function setStatus(next: TCampaignStatus) {
+  settingStatus.value = true
+  try {
+    await CampaignsApi.setStatus(id, next)
+    await refresh()
+    const verb = next === 'ACTIVE' ? (campaign.value?.status === 'DRAFT' ? 'activated' : 'resumed') : 'paused'
+    toast.add({ title: `Campaign ${verb}`, color: 'success' })
+  }
+  catch (err) {
+    toast.add({ title: 'Could not update status', description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    settingStatus.value = false
+  }
+}
+
+// Manually run the scheduler now (same as the every-5-min cron) — sends the next due
+// batch and polls videos. Rate limits still apply.
+const running = ref(false)
+async function runScheduler() {
+  running.value = true
+  try {
+    const s = await SchedulerApi.run()
+    await refresh()
+    const parts = [
+      `${s.emailsSent} email${s.emailsSent === 1 ? '' : 's'} sent`,
+      s.videosCompleted ? `${s.videosCompleted} video(s) ready` : '',
+    ].filter(Boolean)
+    toast.add({ title: 'Scheduler ran', description: parts.join(' · '), color: s.emailsSent ? 'success' : 'info' })
+  }
+  catch (err) {
+    toast.add({ title: 'Scheduler failed', description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    running.value = false
+  }
+}
+
+// Edit campaign settings (name, description, rate limits)
+const editOpen = ref(false)
+const editForm = reactive({ name: '', description: '', maxSendsPerHour: 20, maxSendsPerDay: 100 })
+const savingEdit = ref(false)
+function openEdit() {
   if (!campaign.value)
     return
-  const next = campaign.value.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE'
-  await CampaignsApi.setStatus(id, next)
-  await refresh()
-  toast.add({ title: next === 'ACTIVE' ? 'Campaign resumed' : 'Campaign paused', color: 'success' })
+  Object.assign(editForm, {
+    name: campaign.value.name,
+    description: campaign.value.description ?? '',
+    maxSendsPerHour: campaign.value.maxSendsPerHour,
+    maxSendsPerDay: campaign.value.maxSendsPerDay,
+  })
+  editOpen.value = true
+}
+async function saveEdit() {
+  savingEdit.value = true
+  try {
+    await CampaignsApi.update(id, { ...editForm })
+    await refresh()
+    editOpen.value = false
+    toast.add({ title: 'Campaign updated', color: 'success' })
+  }
+  catch (err) {
+    toast.add({ title: 'Could not save', description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    savingEdit.value = false
+  }
+}
+
+// Per-lead "Send now" — send this enrolled lead its current-step email immediately (testing)
+const sendingLeadId = ref<string | null>(null)
+async function sendLead(lead: ICampaignLead) {
+  sendingLeadId.value = lead.id
+  try {
+    await CampaignsApi.sendLead(id, lead.id)
+    await refresh()
+    toast.add({ title: `Sent to ${lead.leadName}`, description: `Email to ${lead.contactEmail} (test mode redirects it).`, color: 'success' })
+  }
+  catch (err) {
+    toast.add({ title: `Could not send to ${lead.leadName}`, description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    sendingLeadId.value = null
+  }
 }
 
 const leadColumns: Array<TableColumn<ICampaignLead>> = [
@@ -25,6 +106,7 @@ const leadColumns: Array<TableColumn<ICampaignLead>> = [
   { accessorKey: 'status', header: 'Status' },
   { accessorKey: 'nextSendAt', header: 'Next send' },
   { accessorKey: 'withVideo', header: 'Video' },
+  { id: 'actions', header: '' },
 ]
 </script>
 
@@ -38,10 +120,27 @@ const leadColumns: Array<TableColumn<ICampaignLead>> = [
         <template #right>
           <StatusBadge v-if="campaign" :status="campaign.status" />
           <UButton
-            v-if="campaign && ['ACTIVE', 'PAUSED'].includes(campaign.status)"
-            :icon="campaign.status === 'ACTIVE' ? 'i-lucide-pause' : 'i-lucide-play'"
-            :label="campaign.status === 'ACTIVE' ? 'Pause' : 'Resume'"
-            color="neutral" variant="outline" @click="toggle"
+            v-if="campaign" icon="i-lucide-pencil" label="Edit" color="neutral" variant="ghost" @click="openEdit"
+          />
+          <!-- Run the scheduler now (send next due batch + poll videos) when active -->
+          <UButton
+            v-if="campaign && campaign.status === 'ACTIVE'"
+            icon="i-lucide-zap" label="Run scheduler now" color="neutral" variant="outline"
+            :loading="running" @click="runScheduler"
+          />
+          <!-- Status control: Activate a draft, Pause an active, Resume a paused campaign -->
+          <UButton
+            v-if="campaign && campaign.status === 'DRAFT'"
+            icon="i-lucide-play" label="Activate" :loading="settingStatus" @click="setStatus('ACTIVE')"
+          />
+          <UButton
+            v-else-if="campaign && campaign.status === 'ACTIVE'"
+            icon="i-lucide-pause" label="Pause" color="neutral" variant="outline"
+            :loading="settingStatus" @click="setStatus('PAUSED')"
+          />
+          <UButton
+            v-else-if="campaign && campaign.status === 'PAUSED'"
+            icon="i-lucide-play" label="Resume" :loading="settingStatus" @click="setStatus('ACTIVE')"
           />
         </template>
       </UDashboardNavbar>
@@ -109,9 +208,46 @@ const leadColumns: Array<TableColumn<ICampaignLead>> = [
               <UIcon v-if="row.original.withVideo" name="i-lucide-video" class="size-4 text-primary" />
               <span v-else class="text-dimmed">—</span>
             </template>
+            <template #actions-cell="{ row }">
+              <!-- Send now works on any lead for testing (completed leads re-send the last
+                   step without changing state); only a suppressed contact is refused. -->
+              <UButton
+                size="xs" color="neutral" variant="ghost" icon="i-lucide-send"
+                :label="['COMPLETED', 'REPLIED'].includes(row.original.status) ? 'Resend' : 'Send now'"
+                :loading="sendingLeadId === row.original.id"
+                :disabled="row.original.status === 'SUPPRESSED'"
+                @click="sendLead(row.original)"
+              />
+            </template>
           </UTable>
         </UCard>
       </div>
+
+      <!-- Edit campaign settings -->
+      <UModal v-model:open="editOpen" title="Edit campaign">
+        <template #body>
+          <div class="flex flex-col gap-4">
+            <UFormField label="Name" required>
+              <UInput v-model="editForm.name" class="w-full" />
+            </UFormField>
+            <UFormField label="Description">
+              <UTextarea v-model="editForm.description" :rows="2" class="w-full" />
+            </UFormField>
+            <div class="grid grid-cols-2 gap-4">
+              <UFormField label="Max sends / hour">
+                <UInputNumber v-model="editForm.maxSendsPerHour" :min="1" />
+              </UFormField>
+              <UFormField label="Max sends / day">
+                <UInputNumber v-model="editForm.maxSendsPerDay" :min="1" />
+              </UFormField>
+            </div>
+          </div>
+        </template>
+        <template #footer>
+          <UButton label="Save" :loading="savingEdit" :disabled="!editForm.name.trim()" @click="saveEdit" />
+          <UButton label="Cancel" color="neutral" variant="ghost" @click="editOpen = false" />
+        </template>
+      </UModal>
     </template>
   </UDashboardPanel>
 </template>

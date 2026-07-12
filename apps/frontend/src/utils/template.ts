@@ -17,3 +17,17 @@ export function extractTemplateVars(text: string): Array<string> {
     vars.add(match[1]!)
   return [...vars]
 }
+
+// Just the variables used in {{#if X}} conditionals (for previewing the "empty" branch).
+export function extractConditionalVars(text: string): Array<string> {
+  const vars = new Set<string>()
+  for (const match of text.matchAll(/\{\{#if (\w+)\}\}/g))
+    vars.add(match[1]!)
+  return [...vars]
+}
+
+// Convert newlines to <br> so a plain-text-authored body keeps its line breaks.
+// Mirrors the backend renderer (apps/api/src/lib/template-render.ts).
+export function nl2br(html: string): string {
+  return html.replace(/\r\n|\r|\n/g, '<br>\n')
+}

@@ -15,6 +15,16 @@ export function renderTemplate(text: string, vars: Record<string, string | null 
     .replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? '')
 }
 
+/** Convert newlines to <br> so a plain-text-authored body keeps its line breaks in HTML email. */
+export function nl2br(html: string): string {
+  return html.replace(/\r\n|\r|\n/g, '<br>\n')
+}
+
+/** Render an email body: substitute placeholders, then preserve authored line breaks. */
+export function renderBody(text: string, vars: Record<string, string | null | undefined>): string {
+  return nl2br(renderTemplate(text, vars))
+}
+
 /** Every variable name a template references — both `{{var}}` and `{{#if var}}`. */
 export function extractTemplateVars(text: string): Array<string> {
   const vars = new Set<string>()

@@ -1,6 +1,11 @@
 export default defineNuxtConfig({
   compatibilityDate: '2026-07-01',
   devtools: { enabled: true },
+  app: {
+    head: {
+      link: [{ rel: 'icon', type: 'image/png', href: '/favicon.png' }],
+    },
+  },
   // bluegem-style layout: src/ is the source root, src/app/ holds the
   // non-UI infrastructure (api, types, dummy-data).
   srcDir: 'src/',

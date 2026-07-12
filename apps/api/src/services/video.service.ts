@@ -95,8 +95,11 @@ export abstract class VideoService {
   }
 
   /** Cron tick: advance every PROCESSING video (download completed → R2, mark COMPLETED/FAILED). */
-  static async runPollTick(prisma: PrismaClient, env: Env) {
+  static async runPollTick(prisma: PrismaClient, env: Env): Promise<{ completed: number, failed: number, processing: number }> {
     const videos = await prisma.video.findMany({ where: { status: 'PROCESSING' } })
+    let completed = 0
+    let failed = 0
+    let processing = 0
     for (const video of videos) {
       try {
         const status = await HeygenService.getVideoStatus(env, video.heygenVideoId)
@@ -119,19 +122,26 @@ export abstract class VideoService {
             })
             await prisma.lead.update({ where: { id: video.leadId }, data: { totalCostUsd: { increment: cost.toFixed(4) } } })
           }
+          completed++
         }
         else if (status.status === 'failed') {
           await prisma.video.update({ where: { id: video.id }, data: { status: 'FAILED', error: status.error ?? 'HeyGen render failed' } })
+          failed++
         }
         else if (Date.now() - video.updatedAt.getTime() > RENDER_TIMEOUT_MS) {
           await prisma.video.update({ where: { id: video.id }, data: { status: 'FAILED', error: 'render timed out' } })
+          failed++
         }
-        // else still pending/processing — leave for the next tick
+        else {
+          processing++ // still pending/processing — leave for the next tick
+        }
       }
       catch (err) {
         console.error(`[video-poll] ${video.id}:`, (err as Error).message)
+        processing++ // couldn't reach HeyGen this tick; retry next tick
       }
     }
+    return { completed, failed, processing }
   }
 
   /** Public landing-page data for /v/:token. */

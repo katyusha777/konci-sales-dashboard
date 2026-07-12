@@ -116,8 +116,12 @@ one row per provider call made during enrichment: the audit/debug ledger
 - Placeholders: `{{business_name}} {{contact_first_name}} {{industry}} {{city}}
   {{video_url}} {{demo_phone}} {{demo_pin}} {{unsubscribe_url}}`
 - Conditionals (kept dead simple, no nesting): `{{#if industry}}…{{/if}}` renders only
-  when the variable is non-empty. Renderer lives in frontend `utils/template.ts`; the
-  backend EmailService must implement the same two regexes.
+  when the variable is non-empty (works for ANY placeholder — industry is just the
+  example). Shared renderer: frontend `utils/template.ts` and backend
+  `lib/template-render.ts` implement the same two regexes. The **body is authored as
+  plain text with line breaks** — `renderBody` runs `nl2br` (newlines → `<br>`) so those
+  breaks survive in the HTML email and the preview. The template editor's preview toggle
+  ("Empty <fields>") empties the conditional fields the template actually uses.
 
 **Campaign** (`campaigns`) — the rename of the old repo's "Workflow"
 - `name`, `description`, `status` (DRAFT | ACTIVE | PAUSED | COMPLETED)
@@ -197,7 +201,7 @@ Copy the good integration code from the old repo, cleaned into our static-class 
 | `GooglePlacesService` | `packages/enrichment/src/business/google-places.service.ts` | *(added 2026-07-12)* query-param auth. findplace → details two-step, generic-type filtering. |
 | `OpenrouterService` | `packages/llm/src/index.ts` (subset) | *(added 2026-07-12)* Bearer, plain fetch — no SDK/zod/Langfuse. Only the two enrichment functions: `selectPagesToScrape`, `extractSignals`. Disposition of the rest of the old LLM package: `.claude/ENRICHMENT.md` §"Old packages disposition". |
 | `JambonzService` | `packages/telephony/src/jambonz.adapter.ts` | *(added 2026-07-12)* Bearer. Read-only pool/agent lists (verified) + custom trial provision/release (untested — old repo never left mock mode). Mock adapter + provider factory dropped. See `.claude/TELEPHONY.md`. |
-| `CampaignService` | rewrite (old `workflow-run.task.ts` is the reference) | *(DONE B4)* create (steps + enrollment + best-contact + withVideo top-N), list/detail (computed stats), setStatus, `runSendTick`. Rendering lives in shared `lib/template-render.ts`; the "emailable?" rule in `lib/emailable.ts`. |
+| `CampaignService` | rewrite (old `workflow-run.task.ts` is the reference) | *(DONE B4)* create (steps + enrollment + best-contact + withVideo top-N over *enrollable* leads), list/detail (computed stats), `update` (edit name/description/limits/status), `runSendTick`, `sendLeadNow` (per-lead manual "Send now"/"Resend" — completed leads re-send the last step without state change, for testing). Shared `deliver()` render+send core; rendering in `lib/template-render.ts`; the "emailable?" rule in `lib/emailable.ts`. Endpoints: `PATCH /:id` (edit/status), `POST /:id/leads/:clId/send`. |
 | `VideoService` | — | *(DONE B3)* dual-path generate via HeygenService; `runPollTick` downloads completed video → R2; public page/stream/events by `token`. |
 
 **Enrichment score (keep it dumb and transparent, 0–100):** has website +15, has email +15,
@@ -210,7 +214,11 @@ email +25, industry known +5, socials found +10. Threshold to auto-include in ca
 `fetch` (Hono) and `scheduled` (`src/index.ts` → `src/scheduler.ts` → `runCronTick`); crons
 are in `apps/api/wrangler.jsonc` (`*/5 * * * *`). `apps/worker` was retired (its cron
 removed) to avoid a second Prisma bundle + cross-app imports. `runCronTick` runs both ticks
-under `Promise.allSettled` so one failing can't abort the other. Ticks (idempotent, DB-driven):
+under `Promise.allSettled` so one failing can't abort the other, and returns a summary.
+**Manual trigger:** `POST /api/scheduler/run` runs the same tick on demand (the campaign
+detail page's "Run scheduler now" button) — for sending the next batch without waiting 5
+min; rate limits still apply (they're time-windowed). Campaigns are activated from that page
+too (DRAFT → "Activate"). Ticks (idempotent, DB-driven):
 
 - **Every 5 min — campaign sends**: for each ACTIVE campaign, count emails sent in the last
   hour/day vs `maxSendsPerHour/Day`; take due `campaign_leads` (`status IN (PENDING, SCHEDULED)

@@ -7,6 +7,7 @@ import { healthRoutes } from './health.route'
 import { leadsRoutes } from './leads.route'
 import { playgroundRoutes } from './playground.route'
 import { publicVideoRoutes } from './public-video.route'
+import { schedulerRoutes } from './scheduler.route'
 import { statsRoutes } from './stats.route'
 import { templatesRoutes } from './templates.route'
 import { testRoutes } from './test.route'
@@ -24,6 +25,7 @@ routes.route('/templates', templatesRoutes)
 routes.route('/videos', videosRoutes)
 routes.route('/v', publicVideoRoutes) // PUBLIC
 routes.route('/campaigns', campaignsRoutes)
+routes.route('/scheduler', schedulerRoutes)
 routes.route('/stats', statsRoutes)
 routes.route('/webhooks', webhooksRoutes) // PUBLIC
 routes.route('/unsubscribe', unsubscribeRoutes) // PUBLIC

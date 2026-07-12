@@ -133,12 +133,22 @@ const SAMPLE: Record<string, string> = {
   demo_pin: '4821',
   unsubscribe_url: '#unsubscribe',
 }
-// Toggle to preview how conditionals behave when a variable is empty
-const previewWithoutIndustry = ref(false)
-const previewVars = computed(() => previewWithoutIndustry.value ? { ...SAMPLE, industry: '' } : SAMPLE)
+// The variables this template uses in {{#if …}} conditionals — whatever they are.
+const conditionalVars = computed(() => extractConditionalVars(allTexts.value))
+// Toggle: preview the "empty" branch of every conditional (so you see how {{#if X}}…{{/if}}
+// renders when its field has no value — for whatever fields you used, not just industry).
+const previewEmptyOptional = ref(false)
+const previewVars = computed(() => {
+  const vars = { ...SAMPLE }
+  if (previewEmptyOptional.value) {
+    for (const v of conditionalVars.value)
+      vars[v] = ''
+  }
+  return vars
+})
 
 const previewSubject = computed(() => renderTemplate(draft.value?.subject ?? '', previewVars.value))
-const previewBody = computed(() => renderTemplate(draft.value?.body ?? '', previewVars.value))
+const previewBody = computed(() => nl2br(renderTemplate(draft.value?.body ?? '', previewVars.value)))
 
 async function save() {
   if (!draft.value)
@@ -261,11 +271,12 @@ async function generateTestVideo() {
               <UButton
                 color="neutral" variant="outline" size="xs" class="font-mono"
                 label="{{#if …}}"
-                @mousedown.prevent="insertToken('{{#if industry}} {{/if}}')"
+                @mousedown.prevent="insertToken('{{#if field}} {{/if}}')"
               />
             </div>
             <p class="text-xs text-muted">
-              Conditionals: <code class="font-mono">{{ '\{\{#if industry\}\}only shown when industry has a value\{\{/if\}\}' }}</code>
+              Conditionals wrap a section that only shows when a field has a value — works for any
+              placeholder, e.g. <code class="font-mono">{{ '\{\{#if city\}\}based in \{\{city\}\}\{\{/if\}\}' }}</code>.
             </p>
 
             <UAlert v-if="missingVars.length" color="error" variant="subtle" icon="i-lucide-triangle-alert" :title="`Unknown placeholder(s): ${missingVars.join(', ')}`" />
@@ -284,7 +295,12 @@ async function generateTestVideo() {
           <template #header>
             <div class="flex items-center justify-between gap-2">
               <span class="font-medium">Preview <span class="text-xs text-muted font-normal">(sample: Lonestar Dental Care)</span></span>
-              <USwitch v-model="previewWithoutIndustry" label="Empty industry" size="sm" />
+              <USwitch
+                v-if="conditionalVars.length"
+                v-model="previewEmptyOptional"
+                :label="`Empty ${conditionalVars.join(', ')}`"
+                size="sm"
+              />
             </div>
           </template>
           <div class="flex flex-col gap-3">

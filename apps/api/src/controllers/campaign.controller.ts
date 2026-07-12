@@ -62,7 +62,7 @@ function serializeDetail(c: CampaignDetailRow) {
 }
 
 export default class CampaignController extends Controller {
-  private fail(status: 400 | 404, message: string, info: string | null = null): Response {
+  private fail(status: 400 | 404 | 409 | 502, message: string, info: string | null = null): Response {
     return this.c.json({ success: false, message, info }, status)
   }
 
@@ -80,17 +80,35 @@ export default class CampaignController extends Controller {
     return this.data(serializeDetail(detail))
   }
 
-  // PATCH /api/campaigns/:id — { status }
-  async setStatus(req: AppRequest<{ Params: { id: string }, Body: { status?: CampaignStatus } }>) {
-    const { status } = req.body
-    if (!status || !CAMPAIGN_STATUSES.includes(status))
-      return this.fail(400, 'A valid status is required')
+  // PATCH /api/campaigns/:id — edit settings and/or status
+  async update(req: AppRequest<{ Params: { id: string }, Body: { status?: CampaignStatus, name?: string, description?: string | null, maxSendsPerHour?: number, maxSendsPerDay?: number } }>) {
+    const b = req.body
+    if (b.status !== undefined && !CAMPAIGN_STATUSES.includes(b.status))
+      return this.fail(400, 'Invalid status')
+    if (b.name !== undefined && !b.name.trim())
+      return this.fail(400, 'Campaign name cannot be empty')
     try {
-      return this.data(serializeCampaign(await CampaignService.setStatus(this.prisma, req.params.id, status)))
+      return this.data(serializeCampaign(await CampaignService.update(this.prisma, req.params.id, b)))
     }
     catch {
       return this.fail(404, 'Campaign not found')
     }
+  }
+
+  // POST /api/campaigns/:id/leads/:campaignLeadId/send — send this lead its current step now
+  async sendLead(req: AppRequest<{ Params: { id: string, campaignLeadId: string } }>) {
+    let result
+    try {
+      result = await CampaignService.sendLeadNow(this.prisma, this.c.env, req.params.id, req.params.campaignLeadId)
+    }
+    catch (err) {
+      return this.fail(404, (err as Error).message)
+    }
+    if (result === 'failed')
+      return this.fail(502, 'Send failed — check the email provider')
+    if (result === 'suppressed')
+      return this.fail(409, 'This contact is suppressed (bounced/unsubscribed) and was skipped')
+    return this.data({ result })
   }
 
   // POST /api/campaigns — create a DRAFT with steps + enrolled leads

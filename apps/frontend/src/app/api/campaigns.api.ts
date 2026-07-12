@@ -14,6 +14,16 @@ export abstract class CampaignsApi {
     return $api(`/api/campaigns/${id}`, { method: 'PATCH', body: { status } })
   }
 
+  // Edit settings (name, description, rate limits).
+  static update(id: string, fields: Partial<Pick<ICampaign, 'name' | 'description' | 'maxSendsPerHour' | 'maxSendsPerDay'>>): Promise<ICampaign> {
+    return $api(`/api/campaigns/${id}`, { method: 'PATCH', body: fields })
+  }
+
+  // Send a specific enrolled lead its current-step email now (for testing).
+  static sendLead(campaignId: string, campaignLeadId: string): Promise<{ result: string }> {
+    return $api(`/api/campaigns/${campaignId}/leads/${campaignLeadId}/send`, { method: 'POST' })
+  }
+
   // Creates a DRAFT with its steps and enrolled leads (best emailable contact per lead;
   // top-N by score flagged withVideo). Activate it from the campaign detail page.
   static create(input: ICampaignCreate): Promise<ICampaign> {
