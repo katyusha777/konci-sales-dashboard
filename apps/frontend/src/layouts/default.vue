@@ -15,6 +15,23 @@ const links: Array<NavigationMenuItem> = [
   { label: 'Campaigns', icon: 'i-lucide-send', to: '/campaigns' },
   { label: 'Templates', icon: 'i-lucide-file-text', to: '/templates' },
   { label: 'Avatars', icon: 'i-lucide-user-round', to: '/avatars' },
+  {
+    label: 'Playground',
+    icon: 'i-lucide-flask-conical',
+    to: '/playground',
+    children: [
+      { label: 'Scrap.io', icon: 'i-lucide-map-pin', to: '/playground/scrapio' },
+      { label: 'HeyGen', icon: 'i-lucide-video', to: '/playground/heygen' },
+      { label: 'Email', icon: 'i-lucide-mail', to: '/playground/email' },
+      { label: 'Apollo', icon: 'i-lucide-user-search', to: '/playground/apollo' },
+      { label: 'PDL', icon: 'i-lucide-contact-round', to: '/playground/pdl' },
+      { label: 'Hunter', icon: 'i-lucide-at-sign', to: '/playground/hunter' },
+      { label: 'FullEnrich', icon: 'i-lucide-layers', to: '/playground/fullenrich' },
+      { label: 'Firecrawl', icon: 'i-lucide-globe', to: '/playground/firecrawl' },
+      { label: 'Google Places', icon: 'i-lucide-map', to: '/playground/google-places' },
+      { label: 'OpenRouter', icon: 'i-lucide-sparkles', to: '/playground/openrouter' },
+    ],
+  },
 ]
 </script>
 

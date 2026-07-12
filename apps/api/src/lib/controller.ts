@@ -3,14 +3,17 @@ import type { AppContext } from './context'
 export interface RouteSchema {
   Params?: Record<string, string>
   Query?: Record<string, string | undefined>
+  Body?: object
 }
 
 // Mirrors FastifyRequest<{ Params: {...} }> — declare the shape in the method
-// signature, then access req.params.foo directly. URL params and query values
-// are always strings at runtime, so the schema is constrained to string types.
+// signature, then access req.params.foo / req.body.bar directly. URL params and
+// query values are always strings at runtime, so those are constrained to strings.
+// Body is parsed JSON ({} when absent/invalid) — typed by the declared schema.
 export interface AppRequest<T extends RouteSchema = RouteSchema> {
   params: T['Params'] extends object ? T['Params'] : Record<string, string>
   query: T['Query'] extends object ? T['Query'] : Record<string, string | undefined>
+  body: T['Body'] extends object ? T['Body'] : unknown
   raw: Request
 }
 
@@ -66,6 +69,7 @@ export function action<C extends Controller>(Ctor: ControllerCtor<C>, method: ke
     const req: AppRequest = {
       params: c.req.param(),
       query: c.req.query(),
+      body: c.req.header('content-type')?.includes('json') ? await c.req.json().catch(() => ({})) : {},
       raw: c.req.raw,
     }
     const result = await (handler as (req: AppRequest) => unknown).call(controller, req)

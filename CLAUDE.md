@@ -7,6 +7,8 @@ enrichment, avatar-video demos, drip email campaigns.
 services, scheduler design, build phases, and (importantly) what was deliberately dropped
 from the old prototype. Keep everything minimal and straightforward: no versioning, no
 audit machinery, no speculative abstraction. When in doubt, fewer tables and fewer layers.
+**Read `.claude/ENRICHMENT.md` before touching enrichment** — providers, flows, costs,
+confidence rules.
 
 ## Monorepo
 
@@ -30,6 +32,14 @@ The owner must always be able to read and manage this codebase himself. Therefor
   abstractions, no premature generality.
 - **After each phase, deliver a short written tour**: what was added, which files, why —
   so the owner reviews phase-by-phase, never a wall of unreviewed code.
+- **Every third-party service gets a Playground page.** When adding a service to
+  `apps/api/src/services/`, also add: (1) playground endpoints on
+  `/api/playground/<service>/*` that call it live and surface provider errors verbatim
+  via `this.error(message, rawError)`, and (2) a page under
+  `apps/frontend/src/pages/playground/` (linked as a child of the "Playground" sidebar
+  item) where the owner can exercise every call with live data, see mapped results AND
+  the raw JSON (`<RawJson>`), and see cost warnings on calls that consume credits.
+  This is how integrations get validated BEFORE features are built on them.
 
 ## Conventions
 

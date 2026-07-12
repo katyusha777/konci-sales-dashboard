@@ -13,9 +13,11 @@ const MAP: Record<string, { label: string, color: 'primary' | 'success' | 'error
   CLOSED_WON: { label: 'Won', color: 'success' },
   CLOSED_LOST: { label: 'Lost', color: 'error' },
   DO_NOT_CONTACT: { label: 'Do not contact', color: 'error' },
-  // Enrichment status
+  // Enrichment / video-generation status
   PENDING: { label: 'Pending', color: 'neutral' },
   IN_PROGRESS: { label: 'In progress', color: 'info' },
+  WAITING: { label: 'Waiting', color: 'neutral' },
+  PROCESSING: { label: 'Processing', color: 'info' },
   COMPLETED: { label: 'Completed', color: 'success' },
   FAILED: { label: 'Failed', color: 'error' },
   SKIPPED: { label: 'Skipped', color: 'neutral' },

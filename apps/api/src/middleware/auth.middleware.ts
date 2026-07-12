@@ -8,6 +8,11 @@ import { AuthService } from '../services/auth.service'
 const PUBLIC_PREFIXES = ['/api/auth', '/api/health']
 
 export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
+  // UniFi SSO is parked (see plan §9.1) — AUTH_DISABLED=true skips session checks.
+  // Remove the flag once the redirect URI is registered and login works.
+  if (c.env.AUTH_DISABLED === 'true')
+    return next()
+
   if (PUBLIC_PREFIXES.some(p => c.req.path.startsWith(p)))
     return next()
 

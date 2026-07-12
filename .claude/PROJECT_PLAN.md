@@ -152,8 +152,14 @@ LeadResearchFact, LeadSourceRecord, lead merge/erase machinery, Avatar versions/
 consent/assets, Template versions + variants + A/B experiments + editor-config SQL table,
 PromptTemplate/PromptExecution (no LLM personalization in V1 — plain `{{var}}` substitution),
 TrialPhoneNumber pool + TrialSession (demo phone/PIN live on Lead; provisioning is manual
-until a Konci platform API exists), Mux, WebhookEvent table, AuditLog, PDL, FullEnrich,
-Firecrawl, Google Places API, OpenRouter/Langfuse, Trigger.dev, Jambonz adapter.
+until a Konci platform API exists), Mux, WebhookEvent table, AuditLog, Langfuse,
+Trigger.dev, Jambonz adapter.
+
+> **Amended 2026-07-12 (owner request):** the enrichment *providers* originally dropped —
+> PDL, FullEnrich, Firecrawl, Google Places, OpenRouter (LLM extraction only) — were
+> reinstated as services + playground pages so the full old enrichment flow can be
+> evaluated live before deciding what Phase B2 actually runs. The enrichment *tables*
+> (LeadEnrichmentRun/Snapshot/Fact) and Langfuse stay dropped. See `.claude/ENRICHMENT.md`.
 
 ## 4. Services (apps/api/src/services/)
 
@@ -166,7 +172,13 @@ Copy the good integration code from the old repo, cleaned into our static-class 
 | `HeygenService` | `packages/video/src/index.ts` | `x-api-key`. `POST /v2/video/generate` (avatar+voice+script), `GET /v1/video_status.get`, `GET /v2/avatars`, `GET /v2/voices`, `GET /v2/templates` + `POST /v2/template/{id}/generate`. Skip the photo-training/digital-twin/upload endpoints. |
 | `EmailService` | `packages/email/src/index.ts` + `apps/api/src/webhooks/resend.controller.ts` | **Resend** — send + svix webhook verification + event mapping; copy both from old repo. **Test mode enforced inside `send()`** (see §6). List-Unsubscribe headers. Keep the send call behind this one service so a provider swap stays a one-file change. |
 | `AuthService` | — | **UniFi Identity SSO**: plain OIDC code flow (discovery URL → authorize redirect → token exchange → userinfo/id_token claims), upsert `users` row by `sub`, issue our session cookie. No Better Auth or other auth framework. |
-| `EnrichmentService` | logic salvaged from `enrichment.task.ts` | Orchestrates: Scrap.io place refresh → Apollo contact match → compute score → write LeadCost rows → update Lead enrichment fields. Retry guard: skip if `enrichmentAttempts >= 3` or COMPLETED within 30 days (unless forced). |
+| `EnrichmentService` | logic salvaged from `enrichment.task.ts` | Orchestrates: Scrap.io place refresh → Apollo contact match → compute score → write LeadCost rows → update Lead enrichment fields. Retry guard: skip if `enrichmentAttempts >= 3` or COMPLETED within 30 days (unless forced). **Which providers/stages V1 actually runs is an open decision — the full old flow is documented in `.claude/ENRICHMENT.md` and every provider is now testable in the playground.** |
+| `PdlService` | `packages/enrichment/src/contact/pdl.adapter.ts` | *(added 2026-07-12)* `X-Api-Key`. Company enrich, tiered people-search (SQL), person enrich, reverse-email search. Shared-domain guard via `lib/website.ts`. |
+| `HunterService` | `packages/enrichment/src/contact/hunter.adapter.ts` | *(added 2026-07-12)* query-param auth. Email finder (charged only on match) + domain search. |
+| `FullenrichService` | `packages/enrichment/src/contact/fullenrich.adapter.ts` | *(added 2026-07-12)* Bearer. Async enrich/reverse-email split into submit + poll endpoints (Workers-friendly); sync people/company search. |
+| `FirecrawlService` | `packages/enrichment/src/business/firecrawl.service.ts` | *(added 2026-07-12)* Bearer. Booking-platform-aware scrape + batchScrape, garbage-content detection. |
+| `GooglePlacesService` | `packages/enrichment/src/business/google-places.service.ts` | *(added 2026-07-12)* query-param auth. findplace → details two-step, generic-type filtering. |
+| `OpenrouterService` | `packages/llm/src/index.ts` (subset) | *(added 2026-07-12)* Bearer, plain fetch — no SDK/zod/Langfuse. Only the two enrichment functions: `selectPagesToScrape`, `extractSignals`. |
 | `CampaignService` | rewrite (old `workflow-run.task.ts` is the reference) | Add/remove leads, launch/pause, compute `nextSendAt`, template rendering (`{{var}}` substitution + missing-var validation). |
 | `VideoService` | — | Create Video row + trigger HeygenService; download completed video → R2; token pages. |
 
@@ -212,7 +224,9 @@ EMAIL_TEST_RECIPIENT=you@example.com
 `DATABASE_URL` (exists) · `EMAIL_TEST_MODE` · `EMAIL_TEST_RECIPIENT` ·
 `RESEND_API_KEY` · `RESEND_FROM_EMAIL` · `RESEND_WEBHOOK_SECRET` ·
 `SCRAPIO_API_KEY` · `APOLLO_API_KEY` · `HEYGEN_API_KEY` ·
-`GOOGLE_PLACES_API_KEY` (available — use only if enrichment ever needs data Scrap.io lacks) ·
+`GOOGLE_PLACES_API_KEY` ·
+`PDL_API_KEY` · `HUNTER_API_KEY` · `FULLENRICH_API_KEY` · `FIRECRAWL_API_KEY` ·
+`OPENROUTER_API_KEY` (enrichment providers, added 2026-07-12 — see `.claude/ENRICHMENT.md`) ·
 `UNIFI_CLIENT_ID` · `UNIFI_CLIENT_SECRET` · `UNIFI_DISCOVERY_URL` ·
 `AUTH_SECRET` (session signing) · `APP_URL` (tracking/video links) ·
 R2 bucket binding `VIDEOS` (wrangler.jsonc).
@@ -263,6 +277,13 @@ all domains · `app/dummy-data/` seeded realistically · api modules returning d
 API: `users`/`sessions` migration, AuthService (UniFi OIDC), auth middleware, `/api/auth/*`
 · `/api` proxied through Nuxt (first-party cookies, no CORS) · login page + route guard.
 
+**Phase F1.5 — Services + Playground** *(DONE 2026-07-12)*
+Real `ScrapioService` / `ApolloService` / `HeygenService` / `EmailService` in
+`apps/api/src/services/` (static classes, `env` passed in, no SDK deps — plain fetch) ·
+`/api/playground/*` endpoints · frontend "Playground" sidebar section with live test
+pages per service (see CLAUDE.md working agreement — every future service gets one).
+Auth middleware honors `AUTH_DISABLED=true` while UniFi SSO is parked.
+
 **Phase F2 — Full frontend on dummy data** *(iterate with the owner until it feels right)*
 Leads list (filters, bulk select) + lead detail (contacts, timeline, costs, notes, konci
 fields) · CSV import flow + Scrap.io search flow (simulated) · campaigns list/wizard/detail
@@ -273,8 +294,10 @@ unsubscribe public pages · empty/loading/error states.
 Full Prisma schema · Lead/Contact/Note controllers · CSV import · ScrapioService + search
 · swap `leads.api.ts` internals to `$api`.
 
-**Phase B2 — Enrichment backend**: ApolloService · EnrichmentService (score, costs, retry
-guard) · swap enrichment calls.
+**Phase B2 — Enrichment backend**: EnrichmentService (score, costs, retry guard) · swap
+enrichment calls. All candidate providers (Apollo, PDL, Hunter, FullEnrich, Firecrawl,
+Google Places, OpenRouter) already have services + playground pages (2026-07-12);
+which stages V1 runs is decided with the owner using `.claude/ENRICHMENT.md` + playground results.
 
 **Phase B3 — Avatars & Templates backend**: HeygenService · avatar sync · template CRUD ·
 test video → R2 → real `/v/:token` + VideoEvents.
