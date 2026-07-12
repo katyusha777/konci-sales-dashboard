@@ -108,6 +108,13 @@ POST /api/playground/jambonz/provision      — ⚠️ takes a REAL number from 
 POST /api/playground/jambonz/release        — returns it
 ```
 
+## Call-event webhook (for later)
+
+The old repo also had `apps/api/src/webhooks/jambonz.controller.ts`: Jambonz posts call
+events, verified with HMAC-SHA256 over the raw body (`x-jambonz-signature`, timing-safe
+compare, secret = the API key) and used to record `callCount` / `firstCallAt` per trial.
+Not ported — becomes relevant when we track "lead actually called their demo".
+
 ## V1 integration plan
 
 Per plan §9.2, demo phone/PIN are **manual fields on the Lead** in V1 — a salesperson

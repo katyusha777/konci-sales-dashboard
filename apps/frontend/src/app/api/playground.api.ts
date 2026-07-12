@@ -5,6 +5,7 @@ import type {
   IEmailLiveConfig,
   IEmailLiveResult,
   IFirecrawlLiveResult,
+  IFullenrichLiveBatchPoll,
   IFullenrichLiveCompany,
   IFullenrichLiveContact,
   IFullenrichLiveEnrichInput,
@@ -78,7 +79,7 @@ export abstract class PlaygroundApi {
     return $api('/api/playground/email/config')
   }
 
-  static emailSend(input: { to: string, subject: string, html: string }): Promise<IEmailLiveResult> {
+  static emailSend(input: { to: string, subject: string, html: string, withUnsubscribeHeaders?: boolean }): Promise<IEmailLiveResult> {
     return $api('/api/playground/email/send', { method: 'POST', body: input })
   }
 
@@ -134,6 +135,14 @@ export abstract class PlaygroundApi {
     return $api(`/api/playground/fullenrich/reverse-email/${enrichmentId}`)
   }
 
+  static fullenrichReverseEmailBatch(emails: Array<string>): Promise<{ enrichmentId: string, count: number }> {
+    return $api('/api/playground/fullenrich/reverse-email-batch', { method: 'POST', body: { emails } })
+  }
+
+  static fullenrichReverseEmailBatchResult(enrichmentId: string): Promise<IFullenrichLiveBatchPoll> {
+    return $api(`/api/playground/fullenrich/reverse-email-batch/${enrichmentId}`)
+  }
+
   static fullenrichSearchPeople(input: { company?: string, domain?: string, city?: string, state?: string, limit?: number }): Promise<Array<IFullenrichLiveContact>> {
     return $api('/api/playground/fullenrich/search-people', { method: 'POST', body: input })
   }
@@ -176,5 +185,9 @@ export abstract class PlaygroundApi {
 
   static openrouterExtract(input: { markdown: string, businessName: string, businessContext?: string }): Promise<IOpenrouterLiveExtract> {
     return $api('/api/playground/openrouter/extract', { method: 'POST', body: input })
+  }
+
+  static openrouterMapCsv(input: { headers: Array<string>, sampleRows: Array<Record<string, string>> }): Promise<Record<string, string | null>> {
+    return $api('/api/playground/openrouter/map-csv', { method: 'POST', body: input })
   }
 }

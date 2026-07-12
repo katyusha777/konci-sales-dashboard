@@ -71,6 +71,48 @@ async function extract() {
     loading.value = false
   }
 }
+
+// ── CSV header mapping (validates the Phase B1 import flow) ──
+const csvText = ref('')
+const csvLoading = ref(false)
+const csvMapping = ref<Record<string, string | null> | null>(null)
+const csvError = ref<ApiError | null>(null)
+
+const CSV_SAMPLE = `Business Name,Web Site,Phone Number,E-mail,Town,ST,Zip,Owner First,Owner Last,Owner Role,Stars,Nr Reviews
+Franklin Barbecue,franklinbbq.com,(512) 653-1187,info@franklinbbq.com,Austin,TX,78702,Aaron,Franklin,Owner,4.7,7221
+Voodoo Doughnut,voodoodoughnut.com,(503) 241-4704,hello@voodoodoughnut.com,Portland,OR,97205,Kenneth,Pogson,Co-founder,4.5,15230`
+
+const csvSamples = [
+  { label: 'Sample messy CSV', apply: () => csvText.value = CSV_SAMPLE },
+]
+
+// Naive comma-split is fine for the playground — the real B1 importer needs proper CSV parsing (quoted fields).
+function parseCsv(text: string): { headers: Array<string>, sampleRows: Array<Record<string, string>> } {
+  const lines = text.trim().split('\n').filter(l => l.trim())
+  const headers = (lines[0] ?? '').split(',').map(h => h.trim())
+  const sampleRows = lines.slice(1, 4).map((line) => {
+    const cells = line.split(',').map(c => c.trim())
+    return Object.fromEntries(headers.map((h, i) => [h, cells[i] ?? '']))
+  })
+  return { headers, sampleRows }
+}
+
+async function mapCsv() {
+  csvLoading.value = true
+  csvError.value = null
+  try {
+    csvMapping.value = await PlaygroundApi.openrouterMapCsv(parseCsv(csvText.value))
+  }
+  catch (err) {
+    csvError.value = err as ApiError
+  }
+  finally {
+    csvLoading.value = false
+  }
+}
+
+const mappedEntries = computed(() => csvMapping.value ? Object.entries(csvMapping.value).filter(([, v]) => v) : [])
+const unmappedFields = computed(() => csvMapping.value ? Object.entries(csvMapping.value).filter(([, v]) => !v).map(([k]) => k) : [])
 </script>
 
 <template>
@@ -201,6 +243,52 @@ async function extract() {
 
           <div v-else-if="!error" class="text-sm text-muted py-12 text-center rounded-xl bg-default shadow-sm">
             Scrape or paste website content, then extract — facts, services, and staff appear here.
+          </div>
+        </div>
+      </div>
+
+      <USeparator class="my-6" />
+
+      <!-- CSV header mapping -->
+      <div class="grid lg:grid-cols-2 gap-6">
+        <UCard>
+          <template #header>
+            <span class="font-medium">CSV header mapping <span class="text-xs text-muted font-normal">(powers the Phase B1 lead import)</span></span>
+          </template>
+          <div class="flex flex-col gap-3">
+            <SampleChips :samples="csvSamples" />
+            <UFormField label="Paste CSV" help="Header row + a few data rows. Simple comma-split here — the real importer will handle quoting.">
+              <UTextarea v-model="csvText" :rows="6" class="w-full font-mono text-xs" placeholder="Business Name,Web Site,Phone Number,…" />
+            </UFormField>
+            <UButton icon="i-lucide-table-properties" label="Map columns live" :loading="csvLoading" :disabled="!csvText.trim()" class="self-start" @click="mapCsv" />
+            <p class="text-xs text-dimmed">
+              Live call — one cheap LLM request. The LLM maps arbitrary column names onto our lead fields.
+            </p>
+          </div>
+        </UCard>
+
+        <div class="flex flex-col gap-3">
+          <UAlert v-if="csvError" color="error" variant="subtle" icon="i-lucide-triangle-alert" :title="csvError.message" :description="csvError.info ?? undefined" />
+          <template v-if="csvMapping">
+            <div class="text-sm text-muted">
+              {{ mappedEntries.length }} fields mapped · {{ unmappedFields.length }} without a match
+            </div>
+            <div class="rounded-xl bg-default shadow-sm divide-y divide-default">
+              <div v-for="[field, column] in mappedEntries" :key="field" class="p-2.5 text-sm flex items-center gap-2">
+                <UBadge color="neutral" variant="outline" size="sm" class="shrink-0 font-mono">
+                  {{ field }}
+                </UBadge>
+                <UIcon name="i-lucide-arrow-left" class="size-3.5 text-dimmed shrink-0" />
+                <span class="font-mono text-xs">{{ column }}</span>
+              </div>
+            </div>
+            <p v-if="unmappedFields.length" class="text-xs text-muted">
+              No match: {{ unmappedFields.join(', ') }}
+            </p>
+            <RawJson :data="csvMapping" />
+          </template>
+          <div v-else-if="!csvError" class="text-sm text-muted py-12 text-center rounded-xl bg-default shadow-sm">
+            Paste a CSV with any column names — the mapping to our lead fields appears here.
           </div>
         </div>
       </div>

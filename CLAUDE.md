@@ -9,7 +9,9 @@ from the old prototype. Keep everything minimal and straightforward: no versioni
 audit machinery, no speculative abstraction. When in doubt, fewer tables and fewer layers.
 **Read `.claude/ENRICHMENT.md` before touching enrichment** — providers, flows, costs,
 confidence rules. **Read `.claude/TELEPHONY.md` before touching telephony** — it hits
-Konci's production phone infrastructure.
+Konci's production phone infrastructure. The old repo is fully audited — before mining
+it for anything, check `.claude/OLD_REPO_AUDIT.md` (what's ported / what to mine per
+phase / what to ignore).
 
 ## Monorepo
 

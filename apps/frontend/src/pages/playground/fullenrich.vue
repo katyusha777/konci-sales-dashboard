@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { IFullenrichLiveCompany, IFullenrichLiveContact, IFullenrichLiveEnrichInput, IFullenrichLivePoll } from '~/app/types'
+import type { IFullenrichLiveBatchPoll, IFullenrichLiveCompany, IFullenrichLiveContact, IFullenrichLiveEnrichInput, IFullenrichLivePoll } from '~/app/types'
 import { ApiError } from '~/app/api/client'
 import { PlaygroundApi } from '~/app/api/playground.api'
 
@@ -94,6 +94,49 @@ async function reverse() {
   finally {
     reverseLoading.value = false
     reverseStatus.value = null
+  }
+}
+
+// ── Reverse email BATCH (async) — the Phase B2 bulk-enrichment pattern ──
+const batchText = ref('')
+const batchLoading = ref(false)
+const batchStatus = ref<string | null>(null)
+const batchResults = ref<IFullenrichLiveBatchPoll['results']>(null)
+const batchError = ref<ApiError | null>(null)
+
+const batchSamples = [
+  { label: 'Cassie + a miss', apply: () => batchText.value = 'cassie@franklinbbq.com\nnobody@definitely-not-a-real-domain-xyz.com' },
+]
+
+const batchEmails = computed(() => batchText.value.split('\n').map(l => l.trim()).filter(Boolean))
+
+async function reverseBatch() {
+  batchLoading.value = true
+  batchError.value = null
+  batchStatus.value = 'submitting…'
+  batchResults.value = null
+  try {
+    const { enrichmentId, count } = await PlaygroundApi.fullenrichReverseEmailBatch(batchEmails.value)
+    batchStatus.value = `${count} submitted — polling…`
+    for (let i = 0; i < 20; i++) {
+      await sleep(3000)
+      if (cancelled)
+        return
+      const res = await PlaygroundApi.fullenrichReverseEmailBatchResult(enrichmentId)
+      batchStatus.value = res.status
+      if (res.status === 'FINISHED') {
+        batchResults.value = res.results
+        return
+      }
+    }
+    throw new ApiError('FullEnrich batch polling timed out after ~60s', 'The job may still finish — poll again with the enrichment ID.')
+  }
+  catch (err) {
+    batchError.value = err as ApiError
+  }
+  finally {
+    batchLoading.value = false
+    batchStatus.value = null
   }
 }
 
@@ -280,6 +323,50 @@ async function searchCompany() {
               </div>
               <RawJson :data="reverseResult.raw" class="mt-3" />
             </UCard>
+          </div>
+        </div>
+
+        <USeparator />
+
+        <!-- Reverse email batch -->
+        <div class="grid lg:grid-cols-2 gap-6">
+          <UCard>
+            <template #header>
+              <span class="font-medium">Reverse email BATCH <span class="text-xs text-muted font-normal">(async — how Phase B2 will bulk-enrich)</span></span>
+            </template>
+            <div class="flex flex-col gap-3">
+              <SampleChips :samples="batchSamples" />
+              <UFormField label="Emails" help="One per line. The API rejects oversized batches — the old flow capped at 100 and halved on rejection.">
+                <UTextarea v-model="batchText" :rows="4" class="w-full font-mono text-xs" placeholder="cassie@franklinbbq.com&#10;someone@else.com" />
+              </UFormField>
+              <UButton icon="i-lucide-layers" label="Submit batch + poll" :loading="batchLoading" :disabled="batchEmails.length === 0" class="self-start" @click="reverseBatch" />
+              <p v-if="batchStatus" class="text-xs text-muted flex items-center gap-1.5">
+                <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin" /> {{ batchStatus }}
+              </p>
+              <p class="text-xs text-dimmed">
+                Live call — $0.03 per email in the batch.
+              </p>
+            </div>
+          </UCard>
+
+          <div class="flex flex-col gap-3">
+            <UAlert v-if="batchError" color="error" variant="subtle" icon="i-lucide-triangle-alert" :title="batchError.message" :description="batchError.info ?? undefined" />
+            <template v-if="batchResults">
+              <div class="text-sm text-muted">
+                {{ batchResults.filter(r => r.result).length }} of {{ batchResults.length }} matched
+              </div>
+              <div class="rounded-xl bg-default shadow-sm divide-y divide-default">
+                <div v-for="r in batchResults" :key="r.email" class="p-3">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <UIcon :name="r.result ? 'i-lucide-circle-check' : 'i-lucide-circle-x'" class="size-4 shrink-0" :class="r.result ? 'text-success' : 'text-muted'" />
+                    <span class="font-mono text-xs">{{ r.email }}</span>
+                    <span v-if="r.result" class="text-sm ms-auto">{{ [r.result.firstName, r.result.lastName].filter(Boolean).join(' ') }} <span class="text-xs text-muted">{{ r.result.jobTitle ?? '' }}</span></span>
+                    <span v-else class="text-xs text-muted ms-auto">no match</span>
+                  </div>
+                </div>
+              </div>
+              <RawJson :data="batchResults" />
+            </template>
           </div>
         </div>
 

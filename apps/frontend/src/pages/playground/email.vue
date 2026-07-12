@@ -22,6 +22,7 @@ const form = reactive({
   templateId: dummyTemplates[0]?.id,
   subject: '',
   html: '',
+  withUnsubscribeHeaders: false,
 })
 
 const templateOptions = dummyTemplates.map(t => ({ label: t.name, value: t.id }))
@@ -44,7 +45,7 @@ async function send() {
   error.value = null
   result.value = null
   try {
-    result.value = await PlaygroundApi.emailSend({ to: form.to, subject: form.subject, html: form.html })
+    result.value = await PlaygroundApi.emailSend({ to: form.to, subject: form.subject, html: form.html, withUnsubscribeHeaders: form.withUnsubscribeHeaders })
   }
   catch (err) {
     error.value = err as ApiError
@@ -95,6 +96,7 @@ async function send() {
             <UFormField label="HTML body">
               <UTextarea v-model="form.html" :rows="10" class="w-full font-mono text-xs" />
             </UFormField>
+            <UCheckbox v-model="form.withUnsubscribeHeaders" label="Attach List-Unsubscribe headers (RFC 8058 one-click — campaigns will always send these)" />
             <UButton icon="i-lucide-send" label="Send test email" :loading="sending" :disabled="!form.to || !form.subject || !form.html" class="self-start" @click="send" />
           </div>
         </UCard>
@@ -108,6 +110,9 @@ async function send() {
               delivered to <b>{{ result.to }}</b>
               <template v-if="result.testMode">
                 (test mode; original recipient was {{ result.originalTo }})
+              </template>
+              <template v-if="result.unsubscribeHeaders">
+                — with List-Unsubscribe headers (see raw JSON)
               </template>
             </span>
           </div>

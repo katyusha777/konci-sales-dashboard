@@ -178,6 +178,72 @@ export abstract class FullenrichService {
     }
   }
 
+  /**
+   * Submit a BATCH of reverse email lookups (~$0.03 each). Poll with getReverseEmailBatchResult().
+   * The API rejects oversized batches with error.enrichment.data.too_many (no documented limit —
+   * the old flow used max 100 and halved on rejection; that retry loop belongs to the caller).
+   */
+  static async submitReverseEmailBatch(env: Env, emails: Array<string>): Promise<{ enrichmentId: string, count: number }> {
+    if (emails.length === 0)
+      throw new Error('At least one email is required')
+
+    const res = await fetch(`${BASE_URL}/contact/reverse/email/bulk`, {
+      method: 'POST',
+      headers: this.headers(env),
+      body: JSON.stringify({ name: `playground-reverse-batch-${Date.now()}`, data: emails.map(email => ({ email })) }),
+    })
+    if (!res.ok) {
+      const body = await res.text()
+      if (body.includes('error.enrichment.data.too_many'))
+        throw new Error(`FullEnrich batch too large (${emails.length} emails) — split it and resubmit smaller batches`)
+      throw new Error(`FullEnrich reverse email batch submit error ${res.status}: ${body}`)
+    }
+
+    const data = await res.json<{ enrichment_id?: string }>()
+    if (!data.enrichment_id)
+      throw new Error('FullEnrich reverse email batch submit returned no enrichment_id')
+    return { enrichmentId: data.enrichment_id, count: emails.length }
+  }
+
+  /** Poll a reverse email batch. FINISHED → one entry per submitted email (result null = no match). */
+  static async getReverseEmailBatchResult(env: Env, enrichmentId: string): Promise<{ status: FullenrichBulkStatus, results: Array<{ email: string, result: FullenrichContactResult | null }> | null }> {
+    const res = await fetch(`${BASE_URL}/contact/reverse/email/bulk/${enrichmentId}`, { headers: this.headers(env) })
+    if (!res.ok)
+      throw new Error(`FullEnrich reverse email batch poll error ${res.status}: ${await res.text()}`)
+
+    const data = await res.json<{ status: FullenrichBulkStatus, data?: Array<FullenrichRecord & { input?: { email?: string } }> }>()
+    if (data.status === 'CREDITS_INSUFFICIENT')
+      throw new Error('FullEnrich: insufficient credits')
+    if (data.status !== 'FINISHED')
+      return { status: data.status, results: null }
+
+    const results = (data.data ?? []).map((record) => {
+      const email = (record.input as { email?: string } | undefined)?.email ?? ''
+      const profile = record.profile
+      if (!profile)
+        return { email, result: null }
+      const currentJob = this.currentEmployment(profile)
+      return {
+        email,
+        result: {
+          firstName: profile.first_name ?? null,
+          lastName: profile.last_name ?? null,
+          workEmail: null,
+          workEmailStatus: null,
+          personalEmail: null,
+          phones: [],
+          jobTitle: currentJob?.title ?? null,
+          seniority: null,
+          linkedinUrl: profile.social_profiles?.linkedin?.url ?? profile.linkedin_url ?? null,
+          confidence: profile.first_name || profile.last_name ? 6 : 0,
+          source: 'fullenrich_reverse_email_batch',
+          raw: profile,
+        } satisfies FullenrichContactResult,
+      }
+    })
+    return { status: 'FINISHED', results }
+  }
+
   /** Synchronous people search at a company. Free — but returns NO emails/phones (enrich separately). */
   static async searchPeople(env: Env, input: { company?: string, domain?: string, city?: string, state?: string, limit?: number }): Promise<Array<FullenrichContactResult>> {
     const body: Record<string, unknown> = { limit: input.limit ?? 10 }

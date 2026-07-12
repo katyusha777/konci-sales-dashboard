@@ -100,6 +100,7 @@ export interface IEmailLiveResult {
   to: string
   testMode: boolean
   originalTo: string
+  unsubscribeHeaders: Record<string, string> | null
 }
 
 export interface IApolloLiveInput {
@@ -252,6 +253,11 @@ export interface IFullenrichLiveContact {
 export interface IFullenrichLivePoll {
   status: 'CREATED' | 'IN_PROGRESS' | 'FINISHED' | 'CANCELED' | 'CREDITS_INSUFFICIENT' | 'RATE_LIMIT' | 'UNKNOWN'
   result: IFullenrichLiveContact | null
+}
+
+export interface IFullenrichLiveBatchPoll {
+  status: string
+  results: Array<{ email: string, result: IFullenrichLiveContact | null }> | null
 }
 
 export interface IFullenrichLiveCompany {

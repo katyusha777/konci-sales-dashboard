@@ -146,12 +146,15 @@ export default class PlaygroundController extends Controller {
     }
   }
 
-  async emailSend(req: AppRequest<{ Body: { to?: string, subject?: string, html?: string } }>): Promise<ApiResponse<SendEmailResult>> {
-    const { to, subject, html } = req.body
+  async emailSend(req: AppRequest<{ Body: { to?: string, subject?: string, html?: string, withUnsubscribeHeaders?: boolean } }>): Promise<ApiResponse<SendEmailResult & { unsubscribeHeaders: Record<string, string> | null }>> {
+    const { to, subject, html, withUnsubscribeHeaders } = req.body
     if (!to || !subject || !html)
       return this.error('to, subject and html are required')
     try {
-      return this.data(await EmailService.send(this.c.env, { to, subject, html }))
+      // Demo token — campaign sends (B4) will pass the Email row's real trackingToken
+      const headers = withUnsubscribeHeaders ? EmailService.buildListUnsubscribeHeaders(this.c.env, 'playground-demo-token') : undefined
+      const result = await EmailService.send(this.c.env, { to, subject, html, headers })
+      return this.data({ ...result, unsubscribeHeaders: headers ?? null })
     }
     catch (err) {
       return this.error('Email send failed', (err as Error).message)
@@ -291,6 +294,26 @@ export default class PlaygroundController extends Controller {
     }
   }
 
+  async fullenrichReverseEmailBatch(req: AppRequest<{ Body: { emails?: Array<string> } }>): Promise<ApiResponse<{ enrichmentId: string, count: number }>> {
+    if (!Array.isArray(req.body.emails) || req.body.emails.length === 0)
+      return this.error('emails array is required')
+    try {
+      return this.data(await FullenrichService.submitReverseEmailBatch(this.c.env, req.body.emails))
+    }
+    catch (err) {
+      return this.error('FullEnrich reverse email batch submit failed', (err as Error).message)
+    }
+  }
+
+  async fullenrichReverseEmailBatchResult(req: AppRequest<{ Params: { id: string } }>): Promise<ApiResponse<{ status: string, results: Array<{ email: string, result: FullenrichContactResult | null }> | null }>> {
+    try {
+      return this.data(await FullenrichService.getReverseEmailBatchResult(this.c.env, req.params.id))
+    }
+    catch (err) {
+      return this.error('FullEnrich reverse email batch poll failed', (err as Error).message)
+    }
+  }
+
   async fullenrichSearchPeople(req: AppRequest<{ Body: { company?: string, domain?: string, city?: string, state?: string, limit?: number } }>): Promise<ApiResponse<Array<FullenrichContactResult>>> {
     if (!req.body.company && !req.body.domain)
       return this.error('company or domain is required')
@@ -349,6 +372,17 @@ export default class PlaygroundController extends Controller {
     }
     catch (err) {
       return this.error('OpenRouter page selection failed', (err as Error).message)
+    }
+  }
+
+  async openrouterMapCsv(req: AppRequest<{ Body: { headers?: Array<string>, sampleRows?: Array<Record<string, string>> } }>): Promise<ApiResponse<Record<string, string | null>>> {
+    if (!Array.isArray(req.body.headers) || req.body.headers.length === 0)
+      return this.error('headers array is required')
+    try {
+      return this.data(await OpenrouterService.mapCsvHeaders(this.c.env, { headers: req.body.headers, sampleRows: req.body.sampleRows ?? [] }))
+    }
+    catch (err) {
+      return this.error('OpenRouter CSV mapping failed', (err as Error).message)
     }
   }
 

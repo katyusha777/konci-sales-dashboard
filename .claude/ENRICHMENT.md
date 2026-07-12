@@ -365,7 +365,7 @@ POST /openrouter/select-pages  POST /openrouter/extract
 | `extractSignals`, `selectPagesToScrape` | enrichment | ✅ ported to `OpenrouterService` |
 | `preparePdlQuery` | enrichment Step 4 (LLM picks PDL query fields) | port in Phase B2 with the waterfall |
 | `validateEnrichmentResults` | enrichment Step 5 (quality retry) | open decision — may not earn its complexity |
-| `mapCsvHeaders` | Phase B1 CSV import column mapping | good candidate — port when building import |
+| `mapCsvHeaders` | Phase B1 CSV import column mapping | ✅ ported to `OpenrouterService.mapCsvHeaders` (2026-07-12, live-tested — see OLD_REPO_AUDIT.md §1) |
 | `deduplicateLead` | B1 import dedup | plan dedups deterministically (domain/place-id); LLM only as fuzzy fallback if ever needed |
 | `parseDiscoveryQuery` | natural-language "Find leads" search | nice-to-have, post-V1; the plan's structured search form covers V1 |
 | `personalizeCopy`, `assistOutreachTemplate` | LLM personalization / template AI-assist | **out of V1** by plan (plain `{{var}}` substitution) |

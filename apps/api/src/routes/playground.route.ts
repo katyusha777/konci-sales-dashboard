@@ -35,6 +35,8 @@ playgroundRoutes.post('/fullenrich/enrich', action(PlaygroundController, 'fullen
 playgroundRoutes.get('/fullenrich/enrich/:id', action(PlaygroundController, 'fullenrichEnrichResult'))
 playgroundRoutes.post('/fullenrich/reverse-email', action(PlaygroundController, 'fullenrichReverseEmail'))
 playgroundRoutes.get('/fullenrich/reverse-email/:id', action(PlaygroundController, 'fullenrichReverseEmailResult'))
+playgroundRoutes.post('/fullenrich/reverse-email-batch', action(PlaygroundController, 'fullenrichReverseEmailBatch'))
+playgroundRoutes.get('/fullenrich/reverse-email-batch/:id', action(PlaygroundController, 'fullenrichReverseEmailBatchResult'))
 playgroundRoutes.post('/fullenrich/search-people', action(PlaygroundController, 'fullenrichSearchPeople'))
 playgroundRoutes.post('/fullenrich/search-company', action(PlaygroundController, 'fullenrichSearchCompany'))
 
@@ -44,6 +46,7 @@ playgroundRoutes.get('/google-places/lookup', action(PlaygroundController, 'goog
 
 playgroundRoutes.post('/openrouter/select-pages', action(PlaygroundController, 'openrouterSelectPages'))
 playgroundRoutes.post('/openrouter/extract', action(PlaygroundController, 'openrouterExtract'))
+playgroundRoutes.post('/openrouter/map-csv', action(PlaygroundController, 'openrouterMapCsv'))
 
 playgroundRoutes.get('/jambonz/numbers', action(PlaygroundController, 'jambonzNumbers'))
 playgroundRoutes.get('/jambonz/applications', action(PlaygroundController, 'jambonzApplications'))
