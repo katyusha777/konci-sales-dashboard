@@ -44,3 +44,8 @@ playgroundRoutes.get('/google-places/lookup', action(PlaygroundController, 'goog
 
 playgroundRoutes.post('/openrouter/select-pages', action(PlaygroundController, 'openrouterSelectPages'))
 playgroundRoutes.post('/openrouter/extract', action(PlaygroundController, 'openrouterExtract'))
+
+playgroundRoutes.get('/jambonz/numbers', action(PlaygroundController, 'jambonzNumbers'))
+playgroundRoutes.get('/jambonz/applications', action(PlaygroundController, 'jambonzApplications'))
+playgroundRoutes.post('/jambonz/provision', action(PlaygroundController, 'jambonzProvision'))
+playgroundRoutes.post('/jambonz/release', action(PlaygroundController, 'jambonzRelease'))

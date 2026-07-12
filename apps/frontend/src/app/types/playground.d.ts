@@ -2,6 +2,8 @@
 
 export interface IScrapioLiveResult {
   externalId: string
+  googleId: string | null
+  placeId: string | null
   name: string
   website: string | null
   phone: string | null
@@ -11,6 +13,8 @@ export interface IScrapioLiveResult {
   state: string | null
   postalCode: string | null
   country: string | null
+  lat: number | null
+  lng: number | null
   industry: string | null
   categories: Array<string>
   rating: number | null
@@ -19,6 +23,7 @@ export interface IScrapioLiveResult {
   isClaimed: boolean | null
   isPermanentlyClosed: boolean | null
   socialLinks: Record<string, string> | null
+  technologies: Array<string>
   raw: unknown
 }
 
@@ -286,6 +291,28 @@ export interface IGooglePlacesLiveResult {
   lng: number | null
   businessHours: Array<string>
   openNow: boolean | null
+  raw: unknown
+}
+
+// ── Jambonz (telephony) ─────────────────────────────────────────────────────
+
+export interface IJambonzLiveNumber {
+  phoneNumberSid: string
+  number: string
+  applicationSid: string | null
+  voipCarrierSid: string | null
+  raw: unknown
+}
+
+export interface IJambonzLiveApplication {
+  applicationSid: string
+  name: string
+  raw: unknown
+}
+
+export interface IJambonzLiveTrial {
+  phone: string
+  pin: string
   raw: unknown
 }
 

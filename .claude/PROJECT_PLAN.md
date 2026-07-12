@@ -178,7 +178,8 @@ Copy the good integration code from the old repo, cleaned into our static-class 
 | `FullenrichService` | `packages/enrichment/src/contact/fullenrich.adapter.ts` | *(added 2026-07-12)* Bearer. Async enrich/reverse-email split into submit + poll endpoints (Workers-friendly); sync people/company search. |
 | `FirecrawlService` | `packages/enrichment/src/business/firecrawl.service.ts` | *(added 2026-07-12)* Bearer. Booking-platform-aware scrape + batchScrape, garbage-content detection. |
 | `GooglePlacesService` | `packages/enrichment/src/business/google-places.service.ts` | *(added 2026-07-12)* query-param auth. findplace → details two-step, generic-type filtering. |
-| `OpenrouterService` | `packages/llm/src/index.ts` (subset) | *(added 2026-07-12)* Bearer, plain fetch — no SDK/zod/Langfuse. Only the two enrichment functions: `selectPagesToScrape`, `extractSignals`. |
+| `OpenrouterService` | `packages/llm/src/index.ts` (subset) | *(added 2026-07-12)* Bearer, plain fetch — no SDK/zod/Langfuse. Only the two enrichment functions: `selectPagesToScrape`, `extractSignals`. Disposition of the rest of the old LLM package: `.claude/ENRICHMENT.md` §"Old packages disposition". |
+| `JambonzService` | `packages/telephony/src/jambonz.adapter.ts` | *(added 2026-07-12)* Bearer. Read-only pool/agent lists (verified) + custom trial provision/release (untested — old repo never left mock mode). Mock adapter + provider factory dropped. See `.claude/TELEPHONY.md`. |
 | `CampaignService` | rewrite (old `workflow-run.task.ts` is the reference) | Add/remove leads, launch/pause, compute `nextSendAt`, template rendering (`{{var}}` substitution + missing-var validation). |
 | `VideoService` | — | Create Video row + trigger HeygenService; download completed video → R2; token pages. |
 
@@ -232,9 +233,11 @@ EMAIL_TEST_RECIPIENT=you@example.com
 R2 bucket binding `VIDEOS` (wrangler.jsonc).
 
 All third-party keys were copied from the old repo's `.env.local` into `apps/api/.dev.vars`
-(2026-07-11); set production values with `wrangler secret put`. The old `.env.local` also
-contains `KONCI_SERVICE_TOKEN` + `API_BASE_URL` — evidence a Konci platform service API
-already exists; investigate when the demo-number/PIN integration comes up.
+(2026-07-11); set production values with `wrangler secret put`. Telephony keys
+(`JAMBONZ_API_URL/KEY/ACCOUNT_SID`) added 2026-07-12 — see `.claude/TELEPHONY.md`.
+(Corrected 2026-07-12: the old env's `KONCI_SERVICE_TOKEN` + `API_BASE_URL` point at the
+old repo's *own* API, not a separate Konci platform API — the telephony platform API is
+the Jambonz server itself.)
 
 ## 7. Frontend pages (Nuxt)
 

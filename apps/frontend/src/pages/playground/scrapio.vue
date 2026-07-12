@@ -61,7 +61,7 @@ async function search(cursor?: string) {
       />
       <div class="grid lg:grid-cols-[18rem_1fr] gap-6">
         <!-- Form -->
-        <div class="flex flex-col gap-3">
+        <UCard :ui="{ body: 'flex flex-col gap-3' }">
           <SampleChips :samples="samples" />
           <UFormField label="Business type" hint="Google Maps category">
             <UInput v-model="params.type" placeholder="dentist, restaurant…" class="w-full" />
@@ -87,7 +87,7 @@ async function search(cursor?: string) {
           <p class="text-xs text-dimmed">
             Live call — consumes Scrap.io credits.
           </p>
-        </div>
+        </UCard>
 
         <!-- Results -->
         <div class="flex flex-col gap-3">
@@ -97,7 +97,7 @@ async function search(cursor?: string) {
             <div class="text-sm text-muted">
               {{ result.results.length }} loaded{{ result.total !== null ? ` of ~${result.total}` : '' }}
             </div>
-            <div class="border border-default rounded-lg divide-y divide-default">
+            <div class="bg-default rounded-xl shadow-sm divide-y divide-default">
               <div v-for="r in result.results" :key="r.externalId" class="p-3">
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="font-medium text-sm">{{ r.name }}</span>
@@ -123,7 +123,7 @@ async function search(cursor?: string) {
             <RawJson :data="result" />
           </template>
 
-          <div v-else-if="!error" class="text-sm text-muted py-12 text-center border border-dashed border-default rounded-lg">
+          <div v-else-if="!error" class="text-sm text-muted py-12 text-center rounded-xl bg-default shadow-sm">
             Set a business type and search — results and raw JSON appear here.
           </div>
         </div>

@@ -15,11 +15,25 @@ UDashboardSidebar / UDashboardNavbar / UDashboardPanel`, `UTable` (sorting/pagin
 - **No PrimeVue.** Nuxt UI covers everything V1 needs. The one gap is charts — when the
   Phase 5 dashboard needs them, add ONE small lib (Unovis — used by Nuxt UI's own
   dashboard template) and nothing else.
-- Theme: black & white. `ui.colors.primary` is `zinc` in `app.config.ts`, and
-  `main.css` overrides `--ui-primary` to near-black (light) / near-white (dark) — so
-  solid buttons, active states and focus rings are monochrome. Use Nuxt UI semantic
-  colors (`primary/success/error/warning`) — no custom palette. Dark mode comes free
-  with Nuxt UI; keep it enabled (toggle lives in the sidebar footer).
+- **Theme: black & white, gray canvas + borderless white cards.** The whole system
+  lives in two files — read both before restyling:
+  - `main.css` sets the tokens. `--ui-primary` is pushed to TRUE black (`#0a0a0a`
+    light) / TRUE white (`#fafafa` dark) — the default `neutral-900` reads as
+    charcoal-gray, which is wrong. Two custom surface tokens carry the "cards float
+    on a canvas" look and **flip per mode** (in dark, surface must be LIGHTER than
+    canvas): `--app-canvas` = recessed page background, `--app-surface` = raised
+    cards + sidebar.
+  - `app.config.ts` wires them via `ui` slot overrides: `dashboardPanel` root =
+    `--app-canvas`, `dashboardSidebar` + `card` = `--app-surface`, and the card
+    `outline` variant drops its `ring` (borders = noise). Sidebar/navbar borders are
+    removed; nav rows and panel padding are widened for negative space.
+- Cards are borderless white with `shadow-sm` + `rounded-xl` — never re-add a
+  `border`/`ring` to a container that sits on the canvas. For inline result lists and
+  empty states, use `bg-default rounded-xl shadow-sm` (a card), not `border …`.
+- Use Nuxt UI semantic colors (`primary/success/error/warning`) — no custom palette.
+  Dark mode comes free with Nuxt UI; keep it enabled (toggle lives in the sidebar
+  footer). Logo: `public/konci.webp` (wordmark) + `public/konci-mark.png` (collapsed),
+  both black, `dark:invert`.
 
 ## Directory layout (bluegem-style: `src/` root, `src/app/` infra — `srcDir: 'src/'`)
 

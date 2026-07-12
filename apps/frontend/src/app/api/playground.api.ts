@@ -18,6 +18,9 @@ import type {
   IHeygenLiveVoice,
   IHunterLiveDomainSearch,
   IHunterLiveEmail,
+  IJambonzLiveApplication,
+  IJambonzLiveNumber,
+  IJambonzLiveTrial,
   IOpenrouterLiveExtract,
   IPdlLiveCompany,
   IPdlLiveCompanyInput,
@@ -147,6 +150,23 @@ export abstract class PlaygroundApi {
   // Google Places
   static googlePlacesLookup(query: string): Promise<IGooglePlacesLiveResult | null> {
     return $api('/api/playground/google-places/lookup', { query: { query } })
+  }
+
+  // Jambonz (telephony)
+  static jambonzNumbers(): Promise<Array<IJambonzLiveNumber>> {
+    return $api('/api/playground/jambonz/numbers')
+  }
+
+  static jambonzApplications(): Promise<Array<IJambonzLiveApplication>> {
+    return $api('/api/playground/jambonz/applications')
+  }
+
+  static jambonzProvision(input: { reference: string, pin?: string }): Promise<IJambonzLiveTrial> {
+    return $api('/api/playground/jambonz/provision', { method: 'POST', body: input })
+  }
+
+  static jambonzRelease(phone: string): Promise<{ released: string }> {
+    return $api('/api/playground/jambonz/release', { method: 'POST', body: { phone } })
   }
 
   // OpenRouter (LLM)

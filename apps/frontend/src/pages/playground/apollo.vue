@@ -192,7 +192,7 @@ async function match() {
             <RawJson :data="result.raw" class="mt-3" />
           </UCard>
 
-          <div v-if="!searched && !error" class="text-sm text-muted py-12 text-center border border-dashed border-default rounded-lg">
+          <div v-if="!searched && !error" class="text-sm text-muted py-12 text-center rounded-xl bg-default shadow-sm">
             Fill any combination (name + domain works best) and match.
           </div>
         </div>

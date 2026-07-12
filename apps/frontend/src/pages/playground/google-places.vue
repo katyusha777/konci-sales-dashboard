@@ -44,7 +44,7 @@ async function lookup() {
     <template #body>
       <div class="grid lg:grid-cols-[18rem_1fr] gap-6">
         <!-- Left: input -->
-        <div class="flex flex-col gap-3">
+        <UCard :ui="{ body: 'flex flex-col gap-3' }">
           <SampleChips :samples="samples" />
           <UFormField label="Search query" help="Business name + city + state works best.">
             <UInput v-model="query" placeholder="Lonestar Dental Care Austin TX" class="w-full" @keydown.enter="query.trim() && lookup()" />
@@ -57,7 +57,7 @@ async function lookup() {
             Enrichment role: identity check + gap-fill — canonical website, structured
             hours, open/closed status. Scrap.io already covers rating/reviews at sourcing.
           </p>
-        </div>
+        </UCard>
 
         <!-- Right: results -->
         <div class="flex flex-col gap-3">
@@ -103,7 +103,7 @@ async function lookup() {
             <RawJson :data="result.raw" class="mt-3" />
           </UCard>
 
-          <div v-if="!searched && !error" class="text-sm text-muted py-12 text-center border border-dashed border-default rounded-lg">
+          <div v-if="!searched && !error" class="text-sm text-muted py-12 text-center rounded-xl bg-default shadow-sm">
             Look up a business — verified Google data and raw JSON appear here.
           </div>
         </div>

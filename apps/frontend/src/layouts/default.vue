@@ -38,6 +38,7 @@ const links = computed<Array<Array<NavigationMenuItem>>>(() => [
         { label: 'FullEnrich ✅', to: '/playground/fullenrich' },
         { label: 'HeyGen ✅', to: '/playground/heygen' },
         { label: 'Email ✅', to: '/playground/email' },
+        { label: 'Jambonz ⚠️', to: '/playground/jambonz' },
       ],
     },
   ],

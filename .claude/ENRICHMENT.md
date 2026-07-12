@@ -356,6 +356,29 @@ GET  /google-places/lookup
 POST /openrouter/select-pages  POST /openrouter/extract
 ```
 
+## Old packages disposition (audited 2026-07-12)
+
+**`packages/llm`** — what each method maps to in the new dashboard:
+
+| Old method | Fits | Status |
+|---|---|---|
+| `extractSignals`, `selectPagesToScrape` | enrichment | ✅ ported to `OpenrouterService` |
+| `preparePdlQuery` | enrichment Step 4 (LLM picks PDL query fields) | port in Phase B2 with the waterfall |
+| `validateEnrichmentResults` | enrichment Step 5 (quality retry) | open decision — may not earn its complexity |
+| `mapCsvHeaders` | Phase B1 CSV import column mapping | good candidate — port when building import |
+| `deduplicateLead` | B1 import dedup | plan dedups deterministically (domain/place-id); LLM only as fuzzy fallback if ever needed |
+| `parseDiscoveryQuery` | natural-language "Find leads" search | nice-to-have, post-V1; the plan's structured search form covers V1 |
+| `personalizeCopy`, `assistOutreachTemplate` | LLM personalization / template AI-assist | **out of V1** by plan (plain `{{var}}` substitution) |
+| Langfuse tracing, zod schemas, PII masking | infra | dropped |
+
+**`packages/lead-sources`** — fully covered: `ScrapioService` is a complete port of
+`scrapio.adapter.ts` (same endpoints, location parsing, per-page snapping, quality
+filters, post-filter for closed places). Gap closed 2026-07-12: added the four mapped
+fields we'd skipped — `googleId`/`placeId` (separate, for the `googlePlaceId` dedup key),
+`lat`/`lng`, `technologies`. The adapter interface + factory were intentionally dropped.
+
+**`packages/telephony`** — ported to `JambonzService`; see `.claude/TELEPHONY.md`.
+
 ## Open decisions for Phase B2 (the real `EnrichmentService`)
 
 - Which stages does V1 actually run? The plan's minimal take (§4: Scrap.io refresh +

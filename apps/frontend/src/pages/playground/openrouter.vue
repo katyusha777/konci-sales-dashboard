@@ -199,7 +199,7 @@ async function extract() {
             <RawJson :data="result.raw" />
           </template>
 
-          <div v-else-if="!error" class="text-sm text-muted py-12 text-center border border-dashed border-default rounded-lg">
+          <div v-else-if="!error" class="text-sm text-muted py-12 text-center rounded-xl bg-default shadow-sm">
             Scrape or paste website content, then extract — facts, services, and staff appear here.
           </div>
         </div>

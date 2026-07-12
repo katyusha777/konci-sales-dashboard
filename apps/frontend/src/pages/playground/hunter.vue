@@ -126,7 +126,7 @@ async function domainSearch() {
               </div>
               <RawJson :data="finderResult.raw" class="mt-3" />
             </UCard>
-            <div v-if="!finderSearched && !finderError" class="text-sm text-muted py-12 text-center border border-dashed border-default rounded-lg">
+            <div v-if="!finderSearched && !finderError" class="text-sm text-muted py-12 text-center rounded-xl bg-default shadow-sm">
               The cheap step of the contact waterfall — try it before PDL/FullEnrich.
             </div>
           </div>
@@ -175,7 +175,7 @@ async function domainSearch() {
                   No emails known for that domain.
                 </div>
               </UCard>
-              <div v-else class="border border-default rounded-lg divide-y divide-default">
+              <div v-else class="bg-default rounded-xl shadow-sm divide-y divide-default">
                 <div v-for="e in domainResult.emails" :key="e.value" class="p-3">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-medium text-sm">{{ e.value }}</span>
@@ -195,7 +195,7 @@ async function domainSearch() {
               </div>
               <RawJson :data="domainResult.raw" />
             </template>
-            <div v-else-if="!domainError" class="text-sm text-muted py-12 text-center border border-dashed border-default rounded-lg">
+            <div v-else-if="!domainError" class="text-sm text-muted py-12 text-center rounded-xl bg-default shadow-sm">
               Useful for small firms where the exact contact name is uncertain.
             </div>
           </div>

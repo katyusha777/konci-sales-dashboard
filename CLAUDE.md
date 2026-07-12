@@ -8,7 +8,8 @@ services, scheduler design, build phases, and (importantly) what was deliberatel
 from the old prototype. Keep everything minimal and straightforward: no versioning, no
 audit machinery, no speculative abstraction. When in doubt, fewer tables and fewer layers.
 **Read `.claude/ENRICHMENT.md` before touching enrichment** — providers, flows, costs,
-confidence rules.
+confidence rules. **Read `.claude/TELEPHONY.md` before touching telephony** — it hits
+Konci's production phone infrastructure.
 
 ## Monorepo
 

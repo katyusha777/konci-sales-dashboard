@@ -1,13 +1,24 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-/* Black & white theme: primary resolves to near-black (light) / near-white (dark).
-   Shaded primary-* tokens come from `zinc` in app.config.ts. */
+/* Black & white theme.
+   `--ui-primary` drives every solid button / active state / accent. We push it to
+   TRUE black (light) and TRUE white (dark) — neutral-900 reads as charcoal-gray.
+
+   Two surface tokens carry the "cards float on a canvas" look and flip per mode
+   (in dark, the surface must be LIGHTER than the canvas — the opposite of light):
+     --app-canvas  = the recessed page background (sidebar/panel sit on it)
+     --app-surface = raised cards + sidebar (white in light, lifted charcoal in dark) */
 :root {
-  --ui-primary: var(--ui-color-neutral-900);
+  --ui-primary: #0a0a0a;
+  --ui-header-height: 4rem;
+  --app-canvas: var(--ui-color-neutral-100);
+  --app-surface: #fff;
 }
 .dark {
-  --ui-primary: var(--ui-color-neutral-100);
+  --ui-primary: #fafafa;
+  --app-canvas: var(--ui-color-neutral-950);
+  --app-surface: var(--ui-color-neutral-900);
 }
 
 /* Tailwind v4 preflight sets buttons to cursor-default — restore pointer

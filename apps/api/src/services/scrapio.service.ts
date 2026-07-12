@@ -15,6 +15,8 @@ interface ScrapioPlace {
   location_state?: string
   location_postal_code?: string
   location_country_code?: string
+  location_latitude?: number
+  location_longitude?: number
   types?: Array<{ type?: string, is_main?: boolean }>
   is_closed?: boolean
   is_claimed?: boolean
@@ -31,6 +33,8 @@ interface ScrapioPlace {
 
 export interface ScrapioResult {
   externalId: string
+  googleId: string | null
+  placeId: string | null
   name: string
   website: string | null
   phone: string | null
@@ -40,6 +44,8 @@ export interface ScrapioResult {
   state: string | null
   postalCode: string | null
   country: string | null
+  lat: number | null
+  lng: number | null
   industry: string | null
   categories: Array<string>
   rating: number | null
@@ -48,6 +54,7 @@ export interface ScrapioResult {
   isClaimed: boolean | null
   isPermanentlyClosed: boolean | null
   socialLinks: Record<string, string> | null
+  technologies: Array<string>
   raw: unknown
 }
 
@@ -153,6 +160,8 @@ export abstract class ScrapioService {
     const mainType = place.types?.find(t => t.is_main)?.type ?? place.types?.[0]?.type
     return {
       externalId: place.google_id ?? place.place_id ?? '',
+      googleId: place.google_id ?? null,
+      placeId: place.place_id ?? null,
       name: place.name ?? '',
       website: place.website ?? null,
       phone: place.phone ?? null,
@@ -162,6 +171,8 @@ export abstract class ScrapioService {
       state: place.location_state ?? null,
       postalCode: place.location_postal_code ?? null,
       country: place.location_country_code ?? null,
+      lat: place.location_latitude ?? null,
+      lng: place.location_longitude ?? null,
       industry: mainType ?? null,
       categories: place.types?.map(t => t.type).filter((t): t is string => !!t) ?? [],
       rating: place.reviews_rating ?? null,
@@ -170,6 +181,7 @@ export abstract class ScrapioService {
       isClaimed: place.is_claimed ?? null,
       isPermanentlyClosed: place.is_closed ?? null,
       socialLinks: place.website_data?.social_links ?? null,
+      technologies: place.website_data?.technologies ?? [],
       raw: place,
     }
   }

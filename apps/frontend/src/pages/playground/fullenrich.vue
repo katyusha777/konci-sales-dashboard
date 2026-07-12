@@ -326,7 +326,7 @@ async function searchCompany() {
                   Nobody found at that company.
                 </div>
               </UCard>
-              <div v-else class="border border-default rounded-lg divide-y divide-default">
+              <div v-else class="bg-default rounded-xl shadow-sm divide-y divide-default">
                 <div v-for="(p, i) in peopleResult" :key="i" class="p-3">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-medium text-sm">{{ [p.firstName, p.lastName].filter(Boolean).join(' ') }}</span>

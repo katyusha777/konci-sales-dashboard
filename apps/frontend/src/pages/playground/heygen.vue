@@ -237,7 +237,7 @@ onUnmounted(() => {
             <p class="text-sm text-muted mb-2">
               {{ voices.length }} voices — first 10 shown.
             </p>
-            <div class="divide-y divide-default border border-default rounded-lg">
+            <div class="bg-default rounded-xl shadow-sm divide-y divide-default">
               <div v-for="v in voices.slice(0, 10)" :key="v.voiceId" class="p-2.5 flex items-center gap-3 text-sm">
                 <span class="font-medium">{{ v.name }}</span>
                 <span class="text-xs text-muted">{{ v.language ?? '—' }} · {{ v.gender ?? '—' }}</span>
@@ -260,7 +260,7 @@ onUnmounted(() => {
             Not loaded yet.
           </div>
           <template v-else>
-            <div class="divide-y divide-default border border-default rounded-lg">
+            <div class="bg-default rounded-xl shadow-sm divide-y divide-default">
               <div v-for="t in templates" :key="t.templateId" class="p-2.5 flex items-center gap-3">
                 <img v-if="t.thumbnailUrl" :src="t.thumbnailUrl" class="w-16 h-9 object-cover rounded" :alt="t.name">
                 <span class="text-sm font-medium flex-1">{{ t.name }}</span>
@@ -301,7 +301,7 @@ onUnmounted(() => {
             </UFormField>
             <UButton icon="i-lucide-clapperboard" label="Generate video" :loading="generating" :disabled="!gen.avatarId || !gen.voiceId || !gen.script" class="self-start" @click="generate" />
 
-            <div v-if="videoId" class="border border-default rounded-lg p-3 flex flex-col gap-2">
+            <div v-if="videoId" class="bg-default rounded-xl shadow-sm p-3 flex flex-col gap-2">
               <div class="flex items-center gap-2 text-sm">
                 <span class="text-muted">Video {{ videoId }}:</span>
                 <StatusBadge v-if="videoStatus" :status="videoStatus.status.toUpperCase()" />

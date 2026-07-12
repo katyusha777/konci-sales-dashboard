@@ -16,6 +16,7 @@ const services = [
   { name: 'FullEnrich', to: '/playground/fullenrich', icon: 'i-lucide-layers', description: 'Waterfall aggregator — expensive last resort for contacts.', status: '✅' },
   { name: 'HeyGen', to: '/playground/heygen', icon: 'i-lucide-video', description: 'Avatars, voices, studio templates, video generation.', status: '✅' },
   { name: 'Email', to: '/playground/email', icon: 'i-lucide-mail', description: 'Send a test email through Resend (test-mode enforced).', status: '✅' },
+  { name: 'Jambonz', to: '/playground/jambonz', icon: 'i-lucide-phone-call', description: 'Telephony — demo phone numbers + PINs from Konci\'s own server.', status: '⚠️', statusNote: 'Pool/agent lists verified. Provision/release endpoints untested — they take a real number from the production pool; test deliberately from the page.' },
 ]
 </script>
 

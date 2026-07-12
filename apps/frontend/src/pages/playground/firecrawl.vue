@@ -70,7 +70,7 @@ async function selectPages() {
     <template #body>
       <div class="grid lg:grid-cols-[18rem_1fr] gap-6">
         <!-- Left: input -->
-        <div class="flex flex-col gap-3">
+        <UCard :ui="{ body: 'flex flex-col gap-3' }">
           <SampleChips :samples="samples" />
           <UFormField label="Website URL" help="Booking platforms handled automatically.">
             <UInput v-model="url" placeholder="https://lonestardental.com" class="w-full" @keydown.enter="url.trim() && scrape()" />
@@ -86,7 +86,7 @@ async function selectPages() {
               OpenRouter page
             </NuxtLink> — or scrape directly from there.
           </p>
-        </div>
+        </UCard>
 
         <!-- Right: results -->
         <div class="flex flex-col gap-3">
@@ -104,7 +104,7 @@ async function selectPages() {
               {{ result.description }}
             </div>
 
-            <details class="border border-default rounded-lg" open>
+            <details class="bg-default rounded-xl shadow-sm" open>
               <summary class="px-3 py-2 text-xs text-muted cursor-pointer select-none">
                 Markdown
               </summary>
@@ -117,7 +117,7 @@ async function selectPages() {
               <span class="text-xs text-dimmed">next step of the flow — OpenRouter picks staff/services/about pages (~$0.002)</span>
             </div>
             <UAlert v-if="selectError" color="error" variant="subtle" icon="i-lucide-triangle-alert" :title="selectError.message" :description="selectError.info ?? undefined" />
-            <div v-if="selectedPages" class="border border-default rounded-lg divide-y divide-default">
+            <div v-if="selectedPages" class="bg-default rounded-xl shadow-sm divide-y divide-default">
               <div v-if="selectedPages.length === 0" class="p-3 text-sm text-muted">
                 LLM found no subpages worth scraping.
               </div>
@@ -130,7 +130,7 @@ async function selectPages() {
             <RawJson :data="{ url: result.url, title: result.title, isBookingPlatform: result.isBookingPlatform, links: result.links, raw: result.raw }" label="Links + metadata JSON" />
           </template>
 
-          <div v-else-if="!error" class="text-sm text-muted py-12 text-center border border-dashed border-default rounded-lg">
+          <div v-else-if="!error" class="text-sm text-muted py-12 text-center rounded-xl bg-default shadow-sm">
             Scrape a business website — markdown, links, and the LLM subpage selection appear here.
           </div>
         </div>

@@ -14,6 +14,8 @@ import { HeygenService } from '../services/heygen.service'
 import type { HeygenAvatar, HeygenTemplateSummary, HeygenTemplateVariable, HeygenVideoStatus, HeygenVoice } from '../services/heygen.service'
 import { HunterService } from '../services/hunter.service'
 import type { HunterDomainResult, HunterEmailResult } from '../services/hunter.service'
+import { JambonzService } from '../services/jambonz.service'
+import type { JambonzApplication, JambonzNumber, JambonzTrialResult } from '../services/jambonz.service'
 import { OpenrouterService } from '../services/openrouter.service'
 import type { ExtractSignalsResult } from '../services/openrouter.service'
 import { PdlService } from '../services/pdl.service'
@@ -359,6 +361,49 @@ export default class PlaygroundController extends Controller {
     }
     catch (err) {
       return this.error('OpenRouter extraction failed', (err as Error).message)
+    }
+  }
+
+  // ── Jambonz (telephony) ─────────────────────────────────────────────────────
+
+  async jambonzNumbers(): Promise<ApiResponse<Array<JambonzNumber>>> {
+    try {
+      return this.data(await JambonzService.listNumbers(this.c.env))
+    }
+    catch (err) {
+      return this.error('Jambonz number list failed', (err as Error).message)
+    }
+  }
+
+  async jambonzApplications(): Promise<ApiResponse<Array<JambonzApplication>>> {
+    try {
+      return this.data(await JambonzService.listApplications(this.c.env))
+    }
+    catch (err) {
+      return this.error('Jambonz application list failed', (err as Error).message)
+    }
+  }
+
+  async jambonzProvision(req: AppRequest<{ Body: { reference?: string, pin?: string } }>): Promise<ApiResponse<JambonzTrialResult>> {
+    if (!req.body.reference)
+      return this.error('reference is required')
+    try {
+      return this.data(await JambonzService.provisionTrial(this.c.env, req.body.reference, req.body.pin))
+    }
+    catch (err) {
+      return this.error('Jambonz trial provision failed', (err as Error).message)
+    }
+  }
+
+  async jambonzRelease(req: AppRequest<{ Body: { phone?: string } }>): Promise<ApiResponse<{ released: string }>> {
+    if (!req.body.phone)
+      return this.error('phone is required')
+    try {
+      await JambonzService.releaseNumber(this.c.env, req.body.phone)
+      return this.data({ released: req.body.phone })
+    }
+    catch (err) {
+      return this.error('Jambonz release failed', (err as Error).message)
     }
   }
 }
