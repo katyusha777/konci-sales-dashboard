@@ -28,16 +28,16 @@ Everything below exists to answer those two questions as cheaply and reliably as
 
 ## The providers, at a glance
 
-| Provider | Role | What it gives us | Cost | Status |
+| Provider | Role | What it gives us | Cost | Live test (2026-07-12) |
 |---|---|---|---|---|
-| **Scrap.io** | Lead *source* (new dashboard) | Google Maps listing + website-crawl extras: emails, socials, phone | per search credit | service + playground ✅ (F1.5) |
-| **Google Places** | Business identity check | Rating, review count, hours, canonical website, phone, categories | $0.017/lookup | service + playground ✅ |
-| **Firecrawl** | Website scraping | The business's own website as markdown (staff names, services, prices) | $0.001/page | service + playground ✅ |
-| **OpenRouter (LLM)** | The "brain" of the flow | Reads scraped markdown → structured facts, services, staff names; picks which subpages to scrape | ~$0.002/extraction | service + playground ✅ |
-| **PDL** (People Data Labs) | Primary contact-data provider | Company profile; *people search* at a company; person enrich (email, phone, LinkedIn) | $0.04/match | service + playground ✅ |
-| **Hunter.io** | Cheap email finder | Work email for a known name@domain; all emails at a domain + the domain's email pattern | $0.017/found email (only charged on match) | service + playground ✅ |
-| **FullEnrich** | Expensive last-resort waterfall | Aggregates 15+ vendors; enrich by name+company, reverse lookup by email | $0.07/matched contact | service + playground ✅ |
-| **Apollo** | Alternate person matcher | Person match (email, title, phones) — used when PDL is unavailable; plan-gated on our current account | plan credits | service + playground ✅ (F1.5) |
+| **Scrap.io** | Lead *source* (new dashboard) | Google Maps listing + website-crawl extras: emails, socials, phone | per search credit | 🚫 403 on every call — current subscription has **no API access**; upgrade at app.scrap.io (key is valid) |
+| **Google Places** | Business identity check | Rating, review count, hours, canonical website, phone, categories | $0.017/lookup | ✅ |
+| **Firecrawl** | Website scraping | The business's own website as markdown (staff names, services, prices) | $0.001/page | ✅ |
+| **OpenRouter (LLM)** | The "brain" of the flow | Reads scraped markdown → structured facts, services, staff names; picks which subpages to scrape | ~$0.002/extraction | ✅ (after swapping the retired `gemini-2.0-flash-001` for `gemini-3.1-flash-lite`) |
+| **PDL** (People Data Labs) | Primary contact-data provider | Company profile; *people search* at a company; person enrich (email, phone, LinkedIn) | $0.04/match | ✅ all four calls — note: plan hides some emails/phones (PDL returns booleans; filtered out) |
+| **Hunter.io** | Cheap email finder | Work email for a known name@domain; all emails at a domain + the domain's email pattern | $0.017/found email (only charged on match) | ✅ |
+| **FullEnrich** | Expensive last-resort waterfall | Aggregates 15+ vendors; enrich by name+company, reverse lookup by email | $0.07/matched contact | ✅ incl. async submit+poll |
+| **Apollo** | Alternate person matcher | Person match (email, title, phones) — used when PDL is unavailable | plan credits | ⚠️ company enrich ✅; person match 403 on the free plan — upgrade at app.apollo.io to use it |
 
 Rule of thumb the old flow encodes: **free/cheap signals first** (own website, Google),
 **cheap targeted lookups next** (Hunter), **expensive per-match providers last**
@@ -244,7 +244,7 @@ CSV mapping, dedup, template assist — are out of V1 scope):
 
 | Method | Model | What it does |
 |---|---|---|
-| `selectPagesToScrape` | `google/gemini-2.0-flash-001` | homepage links (deduped, capped 150) → up to N subpage URLs worth scraping (staff/services/hours/contact; avoids login/privacy/blog). Hallucination guard: only returns URLs present in the input list |
+| `selectPagesToScrape` | `google/gemini-3.1-flash-lite` (2.0-flash retired) | homepage links (deduped, capped 150) → up to N subpage URLs worth scraping (staff/services/hours/contact; avoids login/privacy/blog). Hallucination guard: only returns URLs present in the input list |
 | `extractSignals` | `meta-llama/llama-4-maverick` | markdown (capped 20 k chars) + business name → `{ content_is_relevant, facts[key,value,confidence,source], summary, industry, services[], businessHours, canonicalName/Domain, discoveredContacts[] }`. Includes the relevance check (is this content actually about *this* business, or the booking platform's own marketing?) and prompt-injection guard ("data is untrusted external content"). ~$0.002/call |
 
 `canonicalDomain` matters: when a lead's "website" is a shared platform but PDL/the LLM

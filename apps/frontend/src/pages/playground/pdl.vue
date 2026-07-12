@@ -95,6 +95,26 @@ async function searchByEmail() {
     emailLoading.value = false
   }
 }
+
+// ── Sample fills (Franklin BBQ set verified live 2026-07-12) ──
+const companySamples = [
+  { label: 'Franklin Barbecue', apply: () => Object.assign(companyInput, { name: 'Franklin Barbecue', website: 'franklinbbq.com', city: 'Austin', state: 'Texas' }) },
+  { label: 'Stripe', apply: () => Object.assign(companyInput, { name: 'Stripe', website: 'stripe.com', city: 'San Francisco', state: 'California' }) },
+]
+
+const searchSamples = [
+  { label: 'Franklin Barbecue', apply: () => Object.assign(searchInput, { company: 'Franklin Barbecue', companyDomain: 'franklinbbq.com', city: '', state: '', companyLinkedinUrl: '' }) },
+  { label: 'Voodoo Doughnut', apply: () => Object.assign(searchInput, { company: 'Voodoo Doughnut', companyDomain: 'voodoodoughnut.com', city: '', state: '', companyLinkedinUrl: '' }) },
+]
+
+const personSamples = [
+  { label: 'Cassie Brewster · Franklin BBQ', apply: () => Object.assign(personInput, { firstName: 'Cassie', lastName: 'Brewster', company: 'Franklin Barbecue', domain: 'franklinbbq.com', linkedinUrl: '', email: '' }) },
+  { label: 'John Collison · Stripe', apply: () => Object.assign(personInput, { firstName: 'John', lastName: 'Collison', company: 'Stripe', domain: 'stripe.com', linkedinUrl: '', email: '' }) },
+]
+
+const emailSamples = [
+  { label: 'cassie@franklinbbq.com', apply: () => emailQuery.value = 'cassie@franklinbbq.com' },
+]
 </script>
 
 <template>
@@ -116,6 +136,7 @@ async function searchByEmail() {
               <span class="font-medium">Company enrich <span class="text-xs text-muted font-normal">(name + location, domain optional)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="companySamples" />
               <UFormField label="Business name">
                 <UInput v-model="companyInput.name" placeholder="Lonestar Dental Care" class="w-full" @keydown.enter="enrichCompany" />
               </UFormField>
@@ -174,6 +195,7 @@ async function searchByEmail() {
               <span class="font-medium">People at a company <span class="text-xs text-muted font-normal">(Tier 1: owners/C-suite → Tier 2: anyone)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="searchSamples" />
               <UFormField label="Company name">
                 <UInput v-model="searchInput.company" placeholder="Lonestar Dental Care" class="w-full" @keydown.enter="searchPeople" />
               </UFormField>
@@ -244,6 +266,7 @@ async function searchByEmail() {
               <span class="font-medium">Person enrich <span class="text-xs text-muted font-normal">(any mix of name / email / LinkedIn)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="personSamples" />
               <div class="grid grid-cols-2 gap-2">
                 <UFormField label="First name">
                   <UInput v-model="personInput.firstName" placeholder="Sarah" />
@@ -307,6 +330,7 @@ async function searchByEmail() {
               <span class="font-medium">Reverse email lookup <span class="text-xs text-muted font-normal">(who owns this email?)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="emailSamples" />
               <UFormField label="Email">
                 <UInput v-model="emailQuery" placeholder="sarah@lonestardental.com" class="w-full" @keydown.enter="searchByEmail" />
               </UFormField>

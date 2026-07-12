@@ -33,6 +33,11 @@ const enrichError = ref<ApiError | null>(null)
 
 const enrichReady = computed(() => (enrichInput.firstName?.trim() && enrichInput.lastName?.trim()) || enrichInput.linkedinUrl?.trim())
 
+const enrichSamples = [
+  { label: 'Cassie Brewster · Franklin BBQ', apply: () => Object.assign(enrichInput, { firstName: 'Cassie', lastName: 'Brewster', company: 'Franklin Barbecue', domain: 'franklinbbq.com', linkedinUrl: '' }) },
+  { label: 'John Collison · Stripe', apply: () => Object.assign(enrichInput, { firstName: 'John', lastName: 'Collison', company: 'Stripe', domain: 'stripe.com', linkedinUrl: '' }) },
+]
+
 async function enrich() {
   enrichLoading.value = true
   enrichError.value = null
@@ -59,6 +64,10 @@ async function enrich() {
 
 // ── Reverse email (async) ──
 const reverseEmail = ref('')
+
+const reverseSamples = [
+  { label: 'cassie@franklinbbq.com', apply: () => reverseEmail.value = 'cassie@franklinbbq.com' },
+]
 const reverseLoading = ref(false)
 const reverseStatus = ref<string | null>(null)
 const reverseSearched = ref(false)
@@ -90,6 +99,11 @@ async function reverse() {
 
 // ── People search (sync, free) ──
 const peopleInput = reactive({ company: '', domain: '', city: '', state: '', limit: 10 })
+
+const peopleSamples = [
+  { label: 'Franklin Barbecue', apply: () => Object.assign(peopleInput, { company: 'Franklin Barbecue', domain: 'franklinbbq.com', city: '', state: '' }) },
+  { label: 'Voodoo Doughnut', apply: () => Object.assign(peopleInput, { company: 'Voodoo Doughnut', domain: 'voodoodoughnut.com', city: '', state: '' }) },
+]
 const peopleLoading = ref(false)
 const peopleSearched = ref(false)
 const peopleResult = ref<Array<IFullenrichLiveContact> | null>(null)
@@ -114,6 +128,13 @@ async function searchPeople() {
 
 // ── Company search (sync, free) ──
 const companyInput = reactive({ name: '', domain: '', city: '', state: '' })
+
+// Note: company search found Stripe but NOT the small BBQ shop in live testing —
+// FullEnrich's company index skews bigger/B2B.
+const companySamples = [
+  { label: 'Stripe', apply: () => Object.assign(companyInput, { name: 'Stripe', domain: 'stripe.com', city: '', state: '' }) },
+  { label: 'Franklin Barbecue (no match)', apply: () => Object.assign(companyInput, { name: 'Franklin Barbecue', domain: '', city: 'Austin', state: 'TX' }) },
+]
 const companyLoading = ref(false)
 const companySearched = ref(false)
 const companyResult = ref<IFullenrichLiveCompany | null>(null)
@@ -156,6 +177,7 @@ async function searchCompany() {
               <span class="font-medium">Contact enrich <span class="text-xs text-muted font-normal">(async — submits then polls ~30s)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="enrichSamples" />
               <div class="grid grid-cols-2 gap-2">
                 <UFormField label="First name">
                   <UInput v-model="enrichInput.firstName" placeholder="Sarah" />
@@ -223,6 +245,7 @@ async function searchCompany() {
               <span class="font-medium">Reverse email lookup <span class="text-xs text-muted font-normal">(async — email → person)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="reverseSamples" />
               <UFormField label="Email">
                 <UInput v-model="reverseEmail" placeholder="sarah@lonestardental.com" class="w-full" @keydown.enter="reverseEmail.trim() && reverse()" />
               </UFormField>
@@ -269,6 +292,7 @@ async function searchCompany() {
               <span class="font-medium">People search <span class="text-xs text-muted font-normal">(sync, free — profiles only, no emails)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="peopleSamples" />
               <UFormField label="Company name">
                 <UInput v-model="peopleInput.company" placeholder="Lonestar Dental Care" class="w-full" />
               </UFormField>
@@ -329,6 +353,7 @@ async function searchCompany() {
               <span class="font-medium">Company search <span class="text-xs text-muted font-normal">(sync, free — best match)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="companySamples" />
               <UFormField label="Company name">
                 <UInput v-model="companyInput.name" placeholder="Lonestar Dental Care" class="w-full" @keydown.enter="companyInput.name.trim() && searchCompany()" />
               </UFormField>

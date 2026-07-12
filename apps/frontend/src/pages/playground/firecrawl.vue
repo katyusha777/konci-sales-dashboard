@@ -8,6 +8,12 @@ const loading = ref(false)
 const result = ref<IFirecrawlLiveResult | null>(null)
 const error = ref<ApiError | null>(null)
 
+const samples = [
+  { label: 'Restaurant site', apply: () => url.value = 'https://franklinbarbecue.com' },
+  { label: 'Squire booking flow', apply: () => url.value = 'https://getsquire.com/booking/brands/ninevehbarbershop' },
+  { label: 'Corporate site', apply: () => url.value = 'https://stripe.com' },
+]
+
 async function scrape(target?: string) {
   if (target)
     url.value = target
@@ -65,10 +71,11 @@ async function selectPages() {
       <div class="grid lg:grid-cols-[18rem_1fr] gap-6">
         <!-- Left: input -->
         <div class="flex flex-col gap-3">
-          <UFormField label="Website URL" hint="booking platforms handled automatically">
+          <SampleChips :samples="samples" />
+          <UFormField label="Website URL" help="Booking platforms handled automatically.">
             <UInput v-model="url" placeholder="https://lonestardental.com" class="w-full" @keydown.enter="url.trim() && scrape()" />
           </UFormField>
-          <UButton icon="i-lucide-globe" label="Scrape live" :loading="loading" :disabled="!url.trim()" @click="scrape()" />
+          <UButton icon="i-lucide-globe" label="Scrape live" block :loading="loading" :disabled="!url.trim()" @click="scrape()" />
           <p class="text-xs text-dimmed">
             Live call — ~$0.001 per page. Booking-flow URLs (/book, /cart…) are resolved
             to the profile page; garbage pages (bot walls, empty carts) throw.

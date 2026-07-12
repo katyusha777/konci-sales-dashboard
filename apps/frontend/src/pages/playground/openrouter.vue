@@ -9,6 +9,24 @@ const form = reactive({
   markdown: '',
 })
 
+// Free to test with — no scrape needed, extraction still costs ~$0.002.
+const SAMPLE_MARKDOWN = `# Franklin Barbecue
+Serving the best barbecue in Austin, TX since 2009. Founded by Aaron Franklin.
+Open Tuesday-Sunday 11am-3pm. We offer brisket, ribs, pulled pork, turkey and sausage.
+Contact: aaron@franklinbbq.com. Our pitmaster team: Aaron Franklin (owner), Braun Hughes (head pitmaster).`
+
+const samples = [
+  { label: 'Sample markdown (no scrape)', apply: () => Object.assign(form, { markdown: SAMPLE_MARKDOWN, businessName: 'Franklin Barbecue', businessContext: '' }) },
+  { label: 'Scrape Franklin Barbecue', apply: () => {
+    scrapeUrl.value = 'https://franklinbarbecue.com'
+    form.businessName = 'Franklin Barbecue'
+  } },
+  { label: 'Scrape Squire barbershop', apply: () => {
+    scrapeUrl.value = 'https://getsquire.com/booking/brands/ninevehbarbershop'
+    Object.assign(form, { businessName: 'Nineveh Barbershop', businessContext: 'A barbershop — ignore Squire platform content' })
+  } },
+]
+
 // Convenience: fetch the markdown straight from Firecrawl so the full
 // scrape → extract chain can be exercised from this one page.
 const scrapeUrl = ref('')
@@ -74,6 +92,7 @@ async function extract() {
               <span class="font-medium">1 · Get markdown <span class="text-xs text-muted font-normal">(paste, or scrape via Firecrawl)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="samples" />
               <div class="flex gap-2">
                 <UInput v-model="scrapeUrl" placeholder="https://lonestardental.com" class="flex-1" @keydown.enter="scrapeUrl.trim() && scrapeFirst()" />
                 <UButton icon="i-lucide-globe" variant="outline" color="neutral" label="Scrape" :loading="scraping" :disabled="!scrapeUrl.trim()" @click="scrapeFirst" />

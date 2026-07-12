@@ -18,6 +18,12 @@ const result = ref<IScrapioLiveSearch | null>(null)
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
 
+const samples = [
+  { label: 'Barbershops · Austin', apply: () => Object.assign(params, { type: 'barbershop', location: 'Austin, TX' }) },
+  { label: 'Dentists · Phoenix', apply: () => Object.assign(params, { type: 'dentist', location: 'Phoenix, AZ' }) },
+  { label: 'Restaurants · Miami', apply: () => Object.assign(params, { type: 'restaurant', location: 'Miami, FL' }) },
+]
+
 async function search(cursor?: string) {
   loading.value = true
   error.value = null
@@ -48,9 +54,15 @@ async function search(cursor?: string) {
     </template>
 
     <template #body>
+      <UAlert
+        color="error" variant="subtle" icon="i-lucide-octagon-x" class="mb-6"
+        title="🚫 Not working (live test 2026-07-12) — API access not included in the current Scrap.io plan"
+        description="Every call returns 403: “You don't have the permission to make API call. Please upgrade your subscription.” The key itself is valid. Fix: upgrade the plan at app.scrap.io → Account → Subscription to a tier that includes API access, then retest here — no code change needed."
+      />
       <div class="grid lg:grid-cols-[18rem_1fr] gap-6">
         <!-- Form -->
         <div class="flex flex-col gap-3">
+          <SampleChips :samples="samples" />
           <UFormField label="Business type" hint="Google Maps category">
             <UInput v-model="params.type" placeholder="dentist, restaurant…" class="w-full" />
           </UFormField>
@@ -71,7 +83,7 @@ async function search(cursor?: string) {
           <UFormField label="Results per page">
             <USelect v-model="params.perPage" :items="[1, 10, 25, 50]" class="w-full" />
           </UFormField>
-          <UButton icon="i-lucide-search" label="Search live" :loading="loading" :disabled="!params.type" @click="search()" />
+          <UButton icon="i-lucide-search" label="Search live" block :loading="loading" :disabled="!params.type" @click="search()" />
           <p class="text-xs text-dimmed">
             Live call — consumes Scrap.io credits.
           </p>

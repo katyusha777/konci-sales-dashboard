@@ -15,9 +15,11 @@ UDashboardSidebar / UDashboardNavbar / UDashboardPanel`, `UTable` (sorting/pagin
 - **No PrimeVue.** Nuxt UI covers everything V1 needs. The one gap is charts — when the
   Phase 5 dashboard needs them, add ONE small lib (Unovis — used by Nuxt UI's own
   dashboard template) and nothing else.
-- Theme via `app.config.ts` (`ui.colors.primary`, neutral gray base). Use Nuxt UI
-  semantic colors (`primary/success/error/warning`) — no custom palette. Dark mode comes
-  free with Nuxt UI; keep it enabled.
+- Theme: black & white. `ui.colors.primary` is `zinc` in `app.config.ts`, and
+  `main.css` overrides `--ui-primary` to near-black (light) / near-white (dark) — so
+  solid buttons, active states and focus rings are monochrome. Use Nuxt UI semantic
+  colors (`primary/success/error/warning`) — no custom palette. Dark mode comes free
+  with Nuxt UI; keep it enabled (toggle lives in the sidebar footer).
 
 ## Directory layout (bluegem-style: `src/` root, `src/app/` infra — `srcDir: 'src/'`)
 

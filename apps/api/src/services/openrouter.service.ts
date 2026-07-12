@@ -6,7 +6,7 @@
 const BASE_URL = 'https://openrouter.ai/api/v1'
 
 const MODELS = {
-  FLASH: 'google/gemini-2.0-flash-001', // fast, cheap — page selection
+  FLASH: 'google/gemini-3.1-flash-lite', // fast, cheap — page selection (2.0-flash was retired)
   LLAMA4: 'meta-llama/llama-4-maverick', // powerful open-weight — extraction
 } as const
 

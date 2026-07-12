@@ -12,6 +12,11 @@ const finderError = ref<ApiError | null>(null)
 
 const finderReady = computed(() => finder.firstName.trim() && finder.lastName.trim() && finder.domain.trim())
 
+const finderSamples = [
+  { label: 'Cassie Brewster · franklinbbq.com', apply: () => Object.assign(finder, { firstName: 'Cassie', lastName: 'Brewster', domain: 'franklinbbq.com' }) },
+  { label: 'John Collison · stripe.com', apply: () => Object.assign(finder, { firstName: 'John', lastName: 'Collison', domain: 'stripe.com' }) },
+]
+
 async function findEmail() {
   finderLoading.value = true
   finderError.value = null
@@ -33,6 +38,11 @@ async function findEmail() {
 
 // ── Domain search ──
 const domainForm = reactive({ domain: '', limit: 10, type: 'personal' as 'personal' | 'generic' | 'all' })
+
+const domainSamples = [
+  { label: 'franklinbbq.com', apply: () => domainForm.domain = 'franklinbbq.com' },
+  { label: 'voodoodoughnut.com', apply: () => domainForm.domain = 'voodoodoughnut.com' },
+]
 const domainLoading = ref(false)
 const domainResult = ref<IHunterLiveDomainSearch | null>(null)
 const domainError = ref<ApiError | null>(null)
@@ -71,6 +81,7 @@ async function domainSearch() {
               <span class="font-medium">Email finder <span class="text-xs text-muted font-normal">(name + domain → email)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="finderSamples" />
               <div class="grid grid-cols-2 gap-2">
                 <UFormField label="First name">
                   <UInput v-model="finder.firstName" placeholder="Sarah" />
@@ -130,6 +141,7 @@ async function domainSearch() {
               <span class="font-medium">Domain search <span class="text-xs text-muted font-normal">(all known emails at a domain)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="domainSamples" />
               <UFormField label="Domain">
                 <UInput v-model="domainForm.domain" placeholder="lonestardental.com" class="w-full" @keydown.enter="domainForm.domain.trim() && domainSearch()" />
               </UFormField>

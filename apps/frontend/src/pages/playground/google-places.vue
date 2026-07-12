@@ -9,6 +9,12 @@ const searched = ref(false)
 const result = ref<IGooglePlacesLiveResult | null>(null)
 const error = ref<ApiError | null>(null)
 
+const samples = [
+  { label: 'Franklin Barbecue', apply: () => query.value = 'Franklin Barbecue Austin TX' },
+  { label: 'Katz\'s Delicatessen', apply: () => query.value = 'Katz\'s Delicatessen New York NY' },
+  { label: 'Voodoo Doughnut', apply: () => query.value = 'Voodoo Doughnut Portland OR' },
+]
+
 async function lookup() {
   loading.value = true
   error.value = null
@@ -39,10 +45,11 @@ async function lookup() {
       <div class="grid lg:grid-cols-[18rem_1fr] gap-6">
         <!-- Left: input -->
         <div class="flex flex-col gap-3">
-          <UFormField label="Search query" hint="business name + city + state works best">
+          <SampleChips :samples="samples" />
+          <UFormField label="Search query" help="Business name + city + state works best.">
             <UInput v-model="query" placeholder="Lonestar Dental Care Austin TX" class="w-full" @keydown.enter="query.trim() && lookup()" />
           </UFormField>
-          <UButton icon="i-lucide-map" label="Look up live" :loading="loading" :disabled="!query.trim()" @click="lookup" />
+          <UButton icon="i-lucide-map" label="Look up live" block :loading="loading" :disabled="!query.trim()" @click="lookup" />
           <p class="text-xs text-dimmed">
             Live call — $0.017 per details request (find-place + details, two-step).
           </p>

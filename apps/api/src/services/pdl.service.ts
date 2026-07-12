@@ -204,14 +204,14 @@ export abstract class PdlService {
   }
 
   private static mapPerson(p: PdlPerson, confidence: number, source: string): PdlPersonResult {
+    // PDL returns boolean true/false instead of the value for fields hidden on the
+    // current plan — keep only real strings.
     return {
       firstName: p.first_name ?? null,
       lastName: p.last_name ?? null,
       workEmail: typeof p.work_email === 'string' ? p.work_email : null,
-      phones: [
-        ...(p.mobile_phone ? [p.mobile_phone] : []),
-        ...(Array.isArray(p.phone_numbers) ? p.phone_numbers : []),
-      ],
+      phones: [p.mobile_phone, ...(Array.isArray(p.phone_numbers) ? p.phone_numbers : [])]
+        .filter((n): n is string => typeof n === 'string'),
       jobTitle: p.job_title ?? null,
       seniority: p.job_title_levels?.[0] ?? null,
       linkedinUrl: p.linkedin_url ?? null,

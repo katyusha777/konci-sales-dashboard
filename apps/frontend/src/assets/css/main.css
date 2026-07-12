@@ -1,6 +1,15 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
+/* Black & white theme: primary resolves to near-black (light) / near-white (dark).
+   Shaded primary-* tokens come from `zinc` in app.config.ts. */
+:root {
+  --ui-primary: var(--ui-color-neutral-900);
+}
+.dark {
+  --ui-primary: var(--ui-color-neutral-100);
+}
+
 /* Tailwind v4 preflight sets buttons to cursor-default — restore pointer
    for all interactive controls (buttons, switches, menu items). */
 @layer base {

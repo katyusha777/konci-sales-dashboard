@@ -41,6 +41,17 @@ const error = ref<ApiError | null>(null)
 
 const hasInput = computed(() => Object.values(input).some(v => v && v.trim()))
 
+const orgSamples = [
+  { label: 'franklinbbq.com', apply: () => orgDomain.value = 'franklinbbq.com' },
+  { label: 'stripe.com', apply: () => orgDomain.value = 'stripe.com' },
+  { label: 'apollo.io', apply: () => orgDomain.value = 'apollo.io' },
+]
+
+const personSamples = [
+  { label: 'Cassie Brewster · Franklin BBQ', apply: () => Object.assign(input, { firstName: 'Cassie', lastName: 'Brewster', organizationName: 'Franklin Barbecue', domain: 'franklinbbq.com', email: '', linkedinUrl: '' }) },
+  { label: 'John Collison · Stripe', apply: () => Object.assign(input, { firstName: 'John', lastName: 'Collison', organizationName: 'Stripe', domain: 'stripe.com', email: '', linkedinUrl: '' }) },
+]
+
 async function match() {
   loading.value = true
   error.value = null
@@ -70,6 +81,12 @@ async function match() {
 
     <template #body>
       <div class="flex flex-col gap-6 max-w-4xl">
+        <UAlert
+          color="warning" variant="subtle" icon="i-lucide-triangle-alert"
+          title="⚠️ Partially working (live test 2026-07-12) — person match is plan-gated"
+          description="Company match works. Person match returns 403: “api/v1/people/match is not accessible with this api_key on a free plan.” Fix: upgrade the Apollo plan at app.apollo.io to test person match — no code change needed. PDL covers this role in the waterfall meanwhile."
+        />
+
         <!-- Company match -->
         <div class="grid lg:grid-cols-2 gap-6">
           <UCard>
@@ -77,6 +94,7 @@ async function match() {
               <span class="font-medium">Company match <span class="text-xs text-muted font-normal">(by domain)</span></span>
             </template>
             <div class="flex flex-col gap-3">
+              <SampleChips :samples="orgSamples" />
               <UFormField label="Domain">
                 <UInput v-model="orgDomain" placeholder="lonestardental.com" class="w-full" @keydown.enter="matchOrganization" />
               </UFormField>
@@ -118,6 +136,7 @@ async function match() {
             <span class="font-medium">Person match <span class="text-xs text-muted font-normal">(currently plan-gated — kept for when the plan upgrades)</span></span>
           </template>
           <div class="flex flex-col gap-3">
+            <SampleChips :samples="personSamples" />
             <div class="grid grid-cols-2 gap-2">
               <UFormField label="First name">
                 <UInput v-model="input.firstName" placeholder="Sarah" />
