@@ -1,9 +1,10 @@
-import type { Contact, EnrichmentResponse, EnrichmentStatus, Lead, LeadCost, LeadNote, LeadStatus } from '../generated/prisma/client'
+import type { Contact, EnrichmentResponse, EnrichmentStatus, KonciRegistration, Lead, LeadCost, LeadNote, LeadStatus } from '../generated/prisma/client'
 import type { AppRequest } from '../lib/controller'
 import { Controller } from '../lib/controller'
 import type { LeadCreateData } from '../services/lead.service'
 import { LeadService } from '../services/lead.service'
 import { EnrichmentService } from '../services/enrichment.service'
+import { KonciRegistrationService } from '../services/konci-registration.service'
 import { OpenrouterService } from '../services/openrouter.service'
 import type { ScrapioResult } from '../services/scrapio.service'
 import { ScrapioService } from '../services/scrapio.service'
@@ -48,6 +49,11 @@ function serializeLead(lead: Lead) {
     konciCustomerId: lead.konciCustomerId,
     demoPhone: lead.demoPhone,
     demoPin: lead.demoPin,
+    videoUrl: lead.videoUrl,
+    videoThumbnailUrl: lead.videoThumbnailUrl,
+    outreachEmail: lead.outreachEmail,
+    outreachContactId: lead.outreachContactId,
+    outreachEmailReason: lead.outreachEmailReason,
     totalCostUsd: Number(lead.totalCostUsd),
     createdAt: lead.createdAt.toISOString(),
     updatedAt: lead.updatedAt.toISOString(),
@@ -91,11 +97,47 @@ function serializeDetail(lead: LeadDetailRecord) {
       id: e.id,
       subject: e.subject,
       status: e.status,
-      campaignName: e.campaignLead?.campaign.name ?? null,
       wasTestMode: e.wasTestMode,
       sentAt: iso(e.sentAt),
       events: e.events.map(ev => ({ type: ev.type, occurredAt: ev.occurredAt.toISOString() })),
     })),
+    konciRegistration: serializeKonciRegistration(lead.konciRegistration),
+    outreachStats: lead.providerEmailStats.map(st => ({
+      sequenceNumber: st.sequenceNumber,
+      externalCampaignId: st.externalCampaignId,
+      email: st.externalLeadEmail,
+      sentAt: iso(st.sentAt),
+      openCount: st.openCount,
+      clickCount: st.clickCount,
+      repliedAt: iso(st.repliedAt),
+      bounced: st.bounced,
+      pulledAt: st.pulledAt.toISOString(),
+    })),
+    videos: lead.videos.map(v => ({
+      id: v.id,
+      status: v.status,
+      error: v.error,
+      token: v.token,
+      hasThumbnail: !!v.thumbnailR2Key,
+      durationSeconds: v.durationSeconds,
+      templateName: v.template?.name ?? null,
+      isTest: Number(v.costUsd ?? 0) === 0,
+      createdAt: v.createdAt.toISOString(),
+    })),
+  }
+}
+
+function serializeKonciRegistration(r: KonciRegistration | null) {
+  if (!r)
+    return null
+  return {
+    status: r.status,
+    konciLeadId: r.konciLeadId,
+    claimUrl: r.claimUrl,
+    claimExpiresAt: iso(r.claimExpiresAt),
+    error: r.error,
+    lastPolledAt: iso(r.lastPolledAt),
+    createdAt: r.createdAt.toISOString(),
   }
 }
 
@@ -131,6 +173,8 @@ interface LeadListQuery {
 interface LeadUpdateBody {
   status?: LeadStatus
   assignedTo?: string | null
+  email?: string | null
+  outreachEmail?: string | null
   konciCustomerId?: string | null
   demoPhone?: string | null
   demoPin?: string | null
@@ -164,6 +208,14 @@ export default class LeadController extends Controller {
     return this.data(await LeadService.industries(this.prisma))
   }
 
+  // POST /api/leads/bulk-delete — { leadIds } → { deleted }. Related rows cascade.
+  async bulkDelete(req: AppRequest<{ Body: { leadIds?: Array<string> } }>) {
+    if (!Array.isArray(req.body.leadIds) || req.body.leadIds.length === 0)
+      return this.fail(400, 'leadIds array is required')
+    const deleted = await LeadService.removeMany(this.prisma, req.body.leadIds)
+    return this.data({ deleted })
+  }
+
   // GET /api/leads/:id
   async show(req: AppRequest<{ Params: { id: string } }>) {
     const lead = await LeadService.detail(this.prisma, req.params.id)
@@ -193,13 +245,16 @@ export default class LeadController extends Controller {
 
   // PATCH /api/leads/:id
   async update(req: AppRequest<{ Params: { id: string }, Body: LeadUpdateBody }>) {
-    const { status, assignedTo, konciCustomerId, demoPhone, demoPin } = req.body
+    const { status, assignedTo, email, outreachEmail, konciCustomerId, demoPhone, demoPin } = req.body
     try {
       await this.prisma.lead.update({
         where: { id: req.params.id },
         data: {
           ...(status !== undefined && { status }),
           ...(assignedTo !== undefined && { assignedTo }),
+          ...(email !== undefined && { email: email?.trim().toLowerCase() || null }),
+          // Manual outreach pick: match a contact when the address is theirs.
+          ...(outreachEmail !== undefined && await this.outreachUpdate(req.params.id, outreachEmail)),
           ...(konciCustomerId !== undefined && { konciCustomerId }),
           ...(demoPhone !== undefined && { demoPhone }),
           ...(demoPin !== undefined && { demoPin }),
@@ -240,6 +295,59 @@ export default class LeadController extends Controller {
       data: { leadId: req.params.id, author: this.user?.email ?? 'owner', body: req.body.body.trim() },
     })
     return this.data(serializeNote(note))
+  }
+
+  private async outreachUpdate(leadId: string, outreachEmail: string | null) {
+    const email = outreachEmail?.trim().toLowerCase() || null
+    if (!email)
+      return { outreachEmail: null, outreachContactId: null, outreachEmailReason: null }
+    const contact = await this.prisma.contact.findFirst({ where: { leadId, email } })
+    return { outreachEmail: email, outreachContactId: contact?.id ?? null, outreachEmailReason: 'Set manually' }
+  }
+
+  // POST /api/leads/:id/pick-outreach-email — AI decision-maker pick (S4b)
+  async pickOutreachEmail(req: AppRequest<{ Params: { id: string }, Body: { force?: boolean } }>) {
+    try {
+      const result = await EnrichmentService.pickOutreachEmail(this.prisma, this.c.env, req.params.id, req.body.force === true)
+      const lead = await LeadService.detail(this.prisma, req.params.id)
+      return this.data({ ...result, lead: serializeDetail(lead!) })
+    }
+    catch (err) {
+      return this.fail(502, 'Outreach email pick failed', (err as Error).message)
+    }
+  }
+
+  // ── Konci platform registration (test account for the lead) ──────────────────
+
+  private async konciAction(leadId: string, fn: () => Promise<unknown>) {
+    try {
+      await fn()
+      const lead = await LeadService.detail(this.prisma, leadId)
+      return this.data(serializeDetail(lead!))
+    }
+    catch (err) {
+      return this.fail(502, 'Konci registration action failed', (err as Error).message)
+    }
+  }
+
+  // POST /api/leads/:id/konci/register
+  async konciRegister(req: AppRequest<{ Params: { id: string } }>) {
+    return this.konciAction(req.params.id, () => KonciRegistrationService.register(this.prisma, this.c.env, req.params.id))
+  }
+
+  // POST /api/leads/:id/konci/refresh — poll Konci now (the cron also does this)
+  async konciRefresh(req: AppRequest<{ Params: { id: string } }>) {
+    return this.konciAction(req.params.id, () => KonciRegistrationService.refresh(this.prisma, this.c.env, req.params.id))
+  }
+
+  // POST /api/leads/:id/konci/retry — failed / needs_phone / skipped only
+  async konciRetry(req: AppRequest<{ Params: { id: string } }>) {
+    return this.konciAction(req.params.id, () => KonciRegistrationService.retry(this.prisma, this.c.env, req.params.id))
+  }
+
+  // POST /api/leads/:id/konci/claim-link — mint a fresh claim link
+  async konciClaimLink(req: AppRequest<{ Params: { id: string } }>) {
+    return this.konciAction(req.params.id, () => KonciRegistrationService.mintClaimLink(this.prisma, this.c.env, req.params.id))
   }
 
   // GET /api/leads/:id/enrichment-responses — the per-call audit ledger (Activity tab)

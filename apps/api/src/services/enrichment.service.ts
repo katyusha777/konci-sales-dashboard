@@ -154,6 +154,10 @@ export abstract class EnrichmentService {
     try {
       await this.run(ctx, lead)
       await this.finalize(ctx, 'COMPLETED', null)
+      // S4b: pick the decision-maker email now that contacts are final. force
+      // re-picks (owner explicitly re-enriched); failure never fails the enrichment.
+      await this.pickOutreachEmail(prisma, env, lead.id, force).catch(err =>
+        console.error(`[outreach-pick] ${lead.id}:`, (err as Error).message))
     }
     catch (err) {
       await this.finalize(ctx, 'FAILED', (err as Error).message)
@@ -661,6 +665,75 @@ export abstract class EnrichmentService {
           durationMs: Date.now() - started,
         },
       }).catch(() => {}) // the audit row must never mask the real error
+      throw err
+    }
+  }
+
+  /**
+   * S4b — AI decision-maker pick. Chooses among all known emails (contacts + the
+   * lead's own inbox) and stamps lead.outreachEmail/-ContactId/-Reason. An existing
+   * pick is kept unless force. Logged to enrichment_responses like any provider call.
+   */
+  static async pickOutreachEmail(prisma: PrismaClient, env: Env, leadId: string, force = false): Promise<{ picked: boolean, email?: string | null, reason: string | null }> {
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      include: { contacts: { orderBy: { priority: 'asc' } } },
+    })
+    if (!lead)
+      throw new Error('Lead not found')
+    if (lead.outreachEmail && !force)
+      return { picked: false, reason: 'Outreach email already set — use force to re-pick' }
+
+    const candidates = [
+      ...lead.contacts.filter(c => c.email).map(c => ({
+        email: c.email!,
+        contactId: c.id,
+        name: [c.firstName, c.lastName].filter(Boolean).join(' ') || null,
+        jobTitle: c.jobTitle,
+        emailStatus: c.emailStatus as string,
+        source: c.source as string,
+      })),
+      ...(lead.email ? [{ email: lead.email, contactId: null, name: null, jobTitle: null, emailStatus: null, source: 'lead inbox' }] : []),
+    ]
+    if (candidates.length === 0)
+      return { picked: false, reason: 'No candidate emails on the lead' }
+
+    const started = Date.now()
+    try {
+      const pick = await OpenrouterService.pickOutreachEmail(env, { businessName: lead.name, industry: lead.industry, candidates })
+      await prisma.enrichmentResponse.create({
+        data: {
+          leadId,
+          provider: 'OPENROUTER',
+          operation: 'pick_outreach_email',
+          request: jsonDump({ candidates }),
+          response: jsonDump(pick),
+          success: true,
+          costUsd: '0.0020',
+          durationMs: Date.now() - started,
+        },
+      }).catch(() => {})
+      if (!pick.email)
+        return { picked: false, reason: pick.reason ?? 'AI found no usable candidate' }
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: { outreachEmail: pick.email, outreachContactId: pick.contactId, outreachEmailReason: pick.reason },
+      })
+      return { picked: true, email: pick.email, reason: pick.reason }
+    }
+    catch (err) {
+      await prisma.enrichmentResponse.create({
+        data: {
+          leadId,
+          provider: 'OPENROUTER',
+          operation: 'pick_outreach_email',
+          request: jsonDump({ candidates }),
+          success: false,
+          error: (err as Error).message,
+          costUsd: 0,
+          durationMs: Date.now() - started,
+        },
+      }).catch(() => {})
       throw err
     }
   }

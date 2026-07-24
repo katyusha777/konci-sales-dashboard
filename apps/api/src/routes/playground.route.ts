@@ -17,8 +17,6 @@ playgroundRoutes.post('/heygen/generate', action(PlaygroundController, 'heygenGe
 playgroundRoutes.post('/heygen/generate-from-template', action(PlaygroundController, 'heygenGenerateFromTemplate'))
 playgroundRoutes.get('/heygen/videos/:id/status', action(PlaygroundController, 'heygenVideoStatus'))
 
-playgroundRoutes.get('/email/config', action(PlaygroundController, 'emailConfig'))
-playgroundRoutes.post('/email/send', action(PlaygroundController, 'emailSend'))
 
 playgroundRoutes.post('/apollo/match', action(PlaygroundController, 'apolloMatch'))
 playgroundRoutes.post('/apollo/organization', action(PlaygroundController, 'apolloOrganization'))
@@ -48,7 +46,16 @@ playgroundRoutes.post('/openrouter/select-pages', action(PlaygroundController, '
 playgroundRoutes.post('/openrouter/extract', action(PlaygroundController, 'openrouterExtract'))
 playgroundRoutes.post('/openrouter/map-csv', action(PlaygroundController, 'openrouterMapCsv'))
 
-playgroundRoutes.get('/jambonz/numbers', action(PlaygroundController, 'jambonzNumbers'))
-playgroundRoutes.get('/jambonz/applications', action(PlaygroundController, 'jambonzApplications'))
-playgroundRoutes.post('/jambonz/provision', action(PlaygroundController, 'jambonzProvision'))
-playgroundRoutes.post('/jambonz/release', action(PlaygroundController, 'jambonzRelease'))
+playgroundRoutes.get('/smartlead/campaigns', action(PlaygroundController, 'smartleadCampaigns'))
+playgroundRoutes.get('/smartlead/campaigns/:id', action(PlaygroundController, 'smartleadCampaign'))
+playgroundRoutes.get('/smartlead/campaigns/:id/analytics', action(PlaygroundController, 'smartleadAnalytics'))
+playgroundRoutes.get('/smartlead/campaigns/:id/statistics', action(PlaygroundController, 'smartleadStatistics'))
+playgroundRoutes.get('/smartlead/campaigns/:id/leads', action(PlaygroundController, 'smartleadCampaignLeads'))
+playgroundRoutes.post('/smartlead/campaigns/:id/leads', action(PlaygroundController, 'smartleadAddLead'))
+playgroundRoutes.get('/smartlead/email-accounts', action(PlaygroundController, 'smartleadEmailAccounts'))
+
+playgroundRoutes.post('/konci/register', action(PlaygroundController, 'konciRegister'))
+playgroundRoutes.get('/konci/leads/:id', action(PlaygroundController, 'konciLead'))
+playgroundRoutes.post('/konci/leads/:id/retry', action(PlaygroundController, 'konciRetry'))
+playgroundRoutes.post('/konci/leads/:id/claim-link', action(PlaygroundController, 'konciClaimLink'))
+

@@ -118,6 +118,17 @@ model Lead {
   demoPhone       String? @map("demo_phone")
   demoPin         String? @map("demo_pin")
 
+  // Outreach video (set automatically when a video render completes — newest wins;
+  // pushed to Smartlead as video_url / video_thumbnail custom fields at sync time)
+  videoUrl          String? @map("video_url")
+  videoThumbnailUrl String? @map("video_thumbnail_url")
+
+  // AI-picked (or manually set) decision-maker email — the send-to address for the
+  // Smartlead sync. A manual pick is never overwritten by the AI (see S4b).
+  outreachEmail       String? @map("outreach_email")
+  outreachContactId   String? @map("outreach_contact_id") @db.Uuid // null = lead-level email
+  outreachEmailReason String? @map("outreach_email_reason") // one-line AI justification
+
   totalCostUsd Decimal @default(0) @map("total_cost_usd") @db.Decimal(10, 4)
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -127,9 +138,11 @@ model Lead {
   notes               LeadNote[]
   costs               LeadCost[]
   enrichmentResponses EnrichmentResponse[]
-  campaignLeads       CampaignLead[]
   emails              Email[]
   videos              Video[]
+  listMembers         LeadListMember[]
+  konciRegistration   KonciRegistration?
+  providerEmailStats  ProviderEmailStat[]
 
   @@index([status])
   @@index([enrichmentStatus])
@@ -175,11 +188,125 @@ model Contact {
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
 
-  campaignLeads CampaignLead[]
-  emails        Email[]
+  emails Email[]
 
   @@unique([leadId, email])
   @@map("contacts")
+}
+
+// ─── Lead lists (smartlead-integration.md §4 — S2) ─────────────────────────────
+
+// Generic sending-provider tag (kept provider-agnostic — see smartlead-integration.md §2)
+enum EmailProvider {
+  SMARTLEAD
+}
+
+// A list only registers Konci accounts + syncs to the provider once ACTIVE —
+// build the list, make videos, THEN activate.
+enum ListStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+}
+
+enum ListSyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+  SKIPPED
+}
+
+model LeadList {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  name        String
+  description String?
+  status      ListStatus @default(DRAFT)
+
+  // Link to the sending provider's campaign; null provider = not linked yet (S3)
+  provider           EmailProvider?
+  externalCampaignId String?        @map("external_campaign_id")
+  lastSyncedAt       DateTime?      @map("last_synced_at")
+  statsPulledAt      DateTime?      @map("stats_pulled_at") // stats-mirror watermark (S5)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members LeadListMember[]
+
+  @@map("lead_lists")
+}
+
+model LeadListMember {
+  id     String   @id @default(uuid(7)) @db.Uuid
+  listId String   @map("list_id") @db.Uuid
+  list   LeadList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  leadId String   @map("lead_id") @db.Uuid
+  lead   Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  // SKIPPED = no outreach email at sync time (fix + re-sync)
+  syncStatus ListSyncStatus @default(PENDING) @map("sync_status")
+  syncedAt   DateTime?      @map("synced_at")
+  syncError  String?        @map("sync_error")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([listId, leadId])
+  @@index([leadId])
+  @@map("lead_list_members")
+}
+
+// The stats mirror (S5): one row per lead-email × sequence step in a provider
+// campaign, upserted on every pull. leadId matched by email — nullable because a
+// campaign may contain leads we didn't push.
+model ProviderEmailStat {
+  id                 String        @id @default(uuid(7)) @db.Uuid
+  provider           EmailProvider
+  externalCampaignId String        @map("external_campaign_id")
+  externalLeadEmail  String        @map("external_lead_email")
+  sequenceNumber     Int           @map("sequence_number")
+  leadId             String?       @map("lead_id") @db.Uuid
+  lead               Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  sentAt             DateTime?     @map("sent_at")
+  openCount          Int           @default(0) @map("open_count")
+  clickCount         Int           @default(0) @map("click_count")
+  repliedAt          DateTime?     @map("replied_at")
+  bounced            Boolean       @default(false)
+  raw                Json?
+  pulledAt           DateTime      @default(now()) @map("pulled_at")
+
+  @@unique([provider, externalCampaignId, externalLeadEmail, sequenceNumber])
+  @@index([leadId])
+  @@map("provider_email_stats")
+}
+
+// ─── Konci platform registration (test account on app.konci.ai for each lead) ───
+// One row per lead; the cron polls PENDING rows until Konci's pipeline is terminal.
+// A lead must be PREPARED (claim URL exists) before it may be synced to Smartlead.
+
+enum KonciRegistrationStatus {
+  PENDING
+  PREPARED
+  NEEDS_PHONE
+  FAILED
+  SKIPPED
+}
+
+model KonciRegistration {
+  id             String                  @id @default(uuid(7)) @db.Uuid
+  leadId         String                  @unique @map("lead_id") @db.Uuid
+  lead           Lead                    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  konciLeadId    String                  @unique @map("konci_lead_id") // their lead_id
+  status         KonciRegistrationStatus @default(PENDING)
+  claimUrl       String?                 @map("claim_url")
+  claimExpiresAt DateTime?               @map("claim_expires_at")
+  error          String?
+  raw            Json? // last GET response, verbatim
+  lastPolledAt   DateTime?               @map("last_polled_at")
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("konci_registrations")
 }
 
 model LeadNote {
@@ -265,15 +392,14 @@ model Avatar {
 }
 
 model Template {
-  id      String @id @default(uuid(7)) @db.Uuid
-  name    String
-  subject String
-  body    String // HTML with {{placeholders}}
+  id   String @id @default(uuid(7)) @db.Uuid
+  name String
 
-  // Video part, two modes: plain avatar video (avatarId + videoScript) or
+  // Video, two modes: plain avatar video (avatarId + videoScript) or
   // HeyGen studio template (heygenTemplateId + videoScenes, one text per scene)
   avatarId         String?  @map("avatar_id") @db.Uuid
   avatar           Avatar?  @relation(fields: [avatarId], references: [id])
+  voiceId          String?  @map("voice_id") // per-template override; falls back to the avatar's voice
   videoScript      String?  @map("video_script")
   heygenTemplateId String?  @map("heygen_template_id")
   videoScenes      String[] @map("video_scenes")
@@ -281,84 +407,10 @@ model Template {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  campaignSteps CampaignStep[]
-  emails        Email[]
-  videos        Video[]
-
-  @@map("templates")
-}
-
-// ─── Campaigns & Email (plan §3 — backend lands in Phase B4) ──────────────────
-
-enum CampaignStatus {
-  DRAFT
-  ACTIVE
-  PAUSED
-  COMPLETED
-}
-
-model Campaign {
-  id              String         @id @default(uuid(7)) @db.Uuid
-  name            String
-  description     String?
-  status          CampaignStatus @default(DRAFT)
-  maxSendsPerHour Int            @default(50) @map("max_sends_per_hour")
-  maxSendsPerDay  Int            @default(200) @map("max_sends_per_day")
-  createdBy       String         @map("created_by")
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
-
-  steps CampaignStep[]
-  leads CampaignLead[]
-
-  @@map("campaigns")
-}
-
-model CampaignStep {
-  id         String   @id @default(uuid(7)) @db.Uuid
-  campaignId String   @map("campaign_id") @db.Uuid
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  order      Int // 0 = initial send
-  templateId String   @map("template_id") @db.Uuid
-  template   Template @relation(fields: [templateId], references: [id])
-  delayDays  Int      @default(0) @map("delay_days") // from previous step
-
-  @@unique([campaignId, order])
-  @@map("campaign_steps")
-}
-
-enum CampaignLeadStatus {
-  PENDING
-  SCHEDULED
-  SENT
-  COMPLETED
-  REPLIED
-  FAILED
-  CANCELLED
-  SUPPRESSED
-}
-
-model CampaignLead {
-  id          String             @id @default(uuid(7)) @db.Uuid
-  campaignId  String             @map("campaign_id") @db.Uuid
-  campaign    Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  leadId      String             @map("lead_id") @db.Uuid
-  lead        Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  contactId   String?            @map("contact_id") @db.Uuid
-  contact     Contact?           @relation(fields: [contactId], references: [id])
-  status      CampaignLeadStatus @default(PENDING)
-  currentStep Int                @default(0) @map("current_step")
-  nextSendAt  DateTime?          @map("next_send_at") // the scheduler queries this
-  withVideo   Boolean            @default(false) @map("with_video") // the 1–5% flag
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-
   emails Email[]
   videos Video[]
 
-  @@unique([campaignId, leadId])
-  @@index([status, nextSendAt])
-  @@map("campaign_leads")
+  @@map("templates")
 }
 
 enum EmailStatus {
@@ -374,8 +426,6 @@ enum EmailStatus {
 
 model Email {
   id                String        @id @default(uuid(7)) @db.Uuid
-  campaignLeadId    String?       @map("campaign_lead_id") @db.Uuid
-  campaignLead      CampaignLead? @relation(fields: [campaignLeadId], references: [id])
   leadId            String        @map("lead_id") @db.Uuid
   lead              Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
   contactId         String?       @map("contact_id") @db.Uuid
@@ -431,8 +481,6 @@ model Video {
   id              String        @id @default(uuid(7)) @db.Uuid
   leadId          String        @map("lead_id") @db.Uuid
   lead            Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  campaignLeadId  String?       @map("campaign_lead_id") @db.Uuid
-  campaignLead    CampaignLead? @relation(fields: [campaignLeadId], references: [id])
   templateId      String?       @map("template_id") @db.Uuid
   template        Template?     @relation(fields: [templateId], references: [id])
   avatarId        String?       @map("avatar_id") @db.Uuid
@@ -441,6 +489,7 @@ model Video {
   status          VideoStatus   @default(PENDING)
   error           String?
   r2Key           String?       @map("r2_key") // downloaded from HeyGen → R2
+  thumbnailR2Key  String?       @map("thumbnail_r2_key") // the email image, served at /api/v/:token/thumb
   durationSeconds Int?          @map("duration_seconds")
   token           String        @unique // public page /v/{token}
   costUsd         Decimal?      @map("cost_usd") @db.Decimal(10, 4)

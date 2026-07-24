@@ -15,8 +15,14 @@ UDashboardSidebar / UDashboardNavbar / UDashboardPanel`, `UTable` (sorting/pagin
 - **No PrimeVue.** Nuxt UI covers everything V1 needs. The one gap is charts — when the
   Phase 5 dashboard needs them, add ONE small lib (Unovis — used by Nuxt UI's own
   dashboard template) and nothing else.
-- **Theme: black & white, gray canvas + borderless white cards.** The whole system
-  lives in two files — read both before restyling:
+- **Theme: black & white, gray canvas + borderless white cards, ALWAYS-dark sidebar,
+  amber accent.** The sidebar is dark in both modes: its `dashboardSidebar` root slot
+  carries the `dark` class, which scopes Nuxt UI's dark tokens (and the logo's
+  `dark:invert`) to that subtree. Amber (`warning` is mapped to `amber`) is the single
+  accent color — active-nav icon, test-mode badge, warning states; everything else
+  stays monochrome. Tables are styled as cards (surface bg + rounded + shadow via the
+  `table` slot overrides), badges are pills. The whole system lives in two files —
+  read both before restyling:
   - `main.css` sets the tokens. `--ui-primary` is pushed to TRUE black (`#0a0a0a`
     light) / TRUE white (`#fafafa` dark) — the default `neutral-900` reads as
     charcoal-gray, which is wrong. Two custom surface tokens carry the "cards float
@@ -121,7 +127,7 @@ export abstract class LeadsApi {
 ## Design language (admin dashboard)
 
 - **Shell**: `UDashboardGroup` → collapsible `UDashboardSidebar` (nav: Dashboard, Leads,
-  Campaigns, Templates, Avatars) + `UDashboardNavbar` (page title, primary action button,
+  Lists, Templates, Videos, Avatars) + `UDashboardNavbar` (page title, primary action button,
   test-mode banner when `EMAIL_TEST_MODE` is on).
 - **List pages**: filters row (USelectMenu/UInput) → `UTable` (server-side pagination,
   sortable columns) → row click opens detail. Bulk-select checkboxes for "Add to

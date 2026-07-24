@@ -248,6 +248,12 @@ export abstract class LeadService {
     return { items, total, page: filters.page, perPage: filters.perPage }
   }
 
+  // Bulk delete — related rows cascade (contacts, videos, members, registration, …).
+  static async removeMany(prisma: PrismaClient, ids: Array<string>): Promise<number> {
+    const result = await prisma.lead.deleteMany({ where: { id: { in: ids } } })
+    return result.count
+  }
+
   static detail(prisma: PrismaClient, id: string) {
     return prisma.lead.findUnique({
       where: { id },
@@ -259,9 +265,14 @@ export abstract class LeadService {
           orderBy: { createdAt: 'desc' },
           include: {
             events: { orderBy: { occurredAt: 'asc' } },
-            campaignLead: { include: { campaign: { select: { name: true } } } },
           },
         },
+        videos: {
+          orderBy: { createdAt: 'desc' },
+          include: { template: { select: { name: true } } },
+        },
+        konciRegistration: true,
+        providerEmailStats: { orderBy: [{ sequenceNumber: 'asc' }] },
       },
     })
   }

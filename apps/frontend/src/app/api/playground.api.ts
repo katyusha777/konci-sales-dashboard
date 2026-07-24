@@ -2,8 +2,6 @@ import type {
   IApolloLiveInput,
   IApolloLiveOrg,
   IApolloLiveResult,
-  IEmailLiveConfig,
-  IEmailLiveResult,
   IFirecrawlLiveResult,
   IFullenrichLiveBatchPoll,
   IFullenrichLiveCompany,
@@ -19,9 +17,7 @@ import type {
   IHeygenLiveVoice,
   IHunterLiveDomainSearch,
   IHunterLiveEmail,
-  IJambonzLiveApplication,
-  IJambonzLiveNumber,
-  IJambonzLiveTrial,
+  IKonciLiveResult,
   IOpenrouterLiveExtract,
   IPdlLiveCompany,
   IPdlLiveCompanyInput,
@@ -31,6 +27,13 @@ import type {
   IPdlLiveSearchPeopleInput,
   IScrapioLiveParams,
   IScrapioLiveSearch,
+  ISmartleadLiveAnalytics,
+  ISmartleadLiveCampaign,
+  ISmartleadLiveCampaignLeads,
+  ISmartleadLiveEmailAccount,
+  ISmartleadLivePushLead,
+  ISmartleadLivePushResult,
+  ISmartleadLiveStatistics,
 } from '~/app/types'
 import { $api } from './client'
 
@@ -72,15 +75,6 @@ export abstract class PlaygroundApi {
 
   static heygenVideoStatus(videoId: string): Promise<IHeygenLiveVideoStatus> {
     return $api(`/api/playground/heygen/videos/${videoId}/status`)
-  }
-
-  // Email
-  static emailConfig(): Promise<IEmailLiveConfig> {
-    return $api('/api/playground/email/config')
-  }
-
-  static emailSend(input: { to: string, subject: string, html: string, withUnsubscribeHeaders?: boolean }): Promise<IEmailLiveResult> {
-    return $api('/api/playground/email/send', { method: 'POST', body: input })
   }
 
   // Apollo
@@ -161,21 +155,50 @@ export abstract class PlaygroundApi {
     return $api('/api/playground/google-places/lookup', { query: { query } })
   }
 
-  // Jambonz (telephony)
-  static jambonzNumbers(): Promise<Array<IJambonzLiveNumber>> {
-    return $api('/api/playground/jambonz/numbers')
+  // Konci platform (internal leads API — staging)
+  static konciRegister(input: { businessName: string, website: string, contactName?: string, socialMedia?: string, teamSize?: string }): Promise<IKonciLiveResult> {
+    return $api('/api/playground/konci/register', { method: 'POST', body: input })
   }
 
-  static jambonzApplications(): Promise<Array<IJambonzLiveApplication>> {
-    return $api('/api/playground/jambonz/applications')
+  static konciLead(id: string): Promise<IKonciLiveResult> {
+    return $api(`/api/playground/konci/leads/${id}`)
   }
 
-  static jambonzProvision(input: { reference: string, pin?: string }): Promise<IJambonzLiveTrial> {
-    return $api('/api/playground/jambonz/provision', { method: 'POST', body: input })
+  static konciRetry(id: string): Promise<IKonciLiveResult> {
+    return $api(`/api/playground/konci/leads/${id}/retry`, { method: 'POST' })
   }
 
-  static jambonzRelease(phone: string): Promise<{ released: string }> {
-    return $api('/api/playground/jambonz/release', { method: 'POST', body: { phone } })
+  static konciClaimLink(id: string): Promise<IKonciLiveResult> {
+    return $api(`/api/playground/konci/leads/${id}/claim-link`, { method: 'POST' })
+  }
+
+  // Smartlead (cold email sending)
+  static smartleadCampaigns(): Promise<Array<ISmartleadLiveCampaign>> {
+    return $api('/api/playground/smartlead/campaigns')
+  }
+
+  static smartleadCampaign(id: number): Promise<ISmartleadLiveCampaign> {
+    return $api(`/api/playground/smartlead/campaigns/${id}`)
+  }
+
+  static smartleadAnalytics(id: number): Promise<ISmartleadLiveAnalytics> {
+    return $api(`/api/playground/smartlead/campaigns/${id}/analytics`)
+  }
+
+  static smartleadStatistics(id: number, opts?: { offset?: number, limit?: number, eventTimeGt?: string }): Promise<ISmartleadLiveStatistics> {
+    return $api(`/api/playground/smartlead/campaigns/${id}/statistics`, { query: opts })
+  }
+
+  static smartleadCampaignLeads(id: number, opts?: { offset?: number, limit?: number }): Promise<ISmartleadLiveCampaignLeads> {
+    return $api(`/api/playground/smartlead/campaigns/${id}/leads`, { query: opts })
+  }
+
+  static smartleadAddLead(id: number, lead: ISmartleadLivePushLead): Promise<ISmartleadLivePushResult> {
+    return $api(`/api/playground/smartlead/campaigns/${id}/leads`, { method: 'POST', body: lead })
+  }
+
+  static smartleadEmailAccounts(): Promise<Array<ISmartleadLiveEmailAccount>> {
+    return $api('/api/playground/smartlead/email-accounts')
   }
 
   // OpenRouter (LLM)

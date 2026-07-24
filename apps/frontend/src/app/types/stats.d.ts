@@ -12,3 +12,16 @@ export interface IOverviewStats {
   funnel: Array<{ status: TLeadStatus, count: number }>
   sendsByDay: Array<{ date: string, sent: number, opened: number, clicked: number }>
 }
+
+// Mirrors the scheduler's TickSummary (apps/api/src/scheduler.ts).
+export interface ITickSummary {
+  videosCompleted: number
+  videosFailed: number
+  videosProcessing: number
+  konciRegistered: number
+  konciPrepared: number
+  leadsSynced: number
+  leadsWaiting: number
+  leadsSyncFailed: number
+  statsUpserted: number
+}

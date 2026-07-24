@@ -203,6 +203,7 @@ Copy the good integration code from the old repo, cleaned into our static-class 
 | `JambonzService` | `packages/telephony/src/jambonz.adapter.ts` | *(added 2026-07-12)* Bearer. Read-only pool/agent lists (verified) + custom trial provision/release (untested — old repo never left mock mode). Mock adapter + provider factory dropped. See `.claude/TELEPHONY.md`. |
 | `CampaignService` | rewrite (old `workflow-run.task.ts` is the reference) | *(DONE B4)* create (steps + enrollment + best-contact + withVideo top-N over *enrollable* leads), list/detail (computed stats), `update` (edit name/description/limits/status), `runSendTick`, `sendLeadNow` (per-lead manual "Send now"/"Resend" — completed leads re-send the last step without state change, for testing). Shared `deliver()` render+send core; rendering in `lib/template-render.ts`; the "emailable?" rule in `lib/emailable.ts`. Endpoints: `PATCH /:id` (edit/status), `POST /:id/leads/:clId/send`. |
 | `VideoService` | — | *(DONE B3)* dual-path generate via HeygenService; `runPollTick` downloads completed video → R2; public page/stream/events by `token`. |
+| `SmartleadService` | — | *(added 2026-07-23, phase S1)* Cold email **sending provider** — campaigns, lead push (custom fields), per-lead stats, email accounts. `?api_key=` query auth. **Direction change: Smartlead replaces the internal Resend campaign sending** — see `.claude/smartlead-integration.md` for decisions, schema plan and phases S1–S6. |
 
 **Enrichment score (keep it dumb and transparent, 0–100):** has website +15, has email +15,
 has phone +10, google rating ≥ 4.0 +10, review count ≥ 20 +10, has ≥1 contact with valid
@@ -236,37 +237,37 @@ correct-enough, no token buckets.
 
 ## 6. Test mode (env-driven, hard to get wrong)
 
-The old repo had `const SEND_TO_OVERRIDE = "cody@hackhouse.io"` hardcoded in the task file.
-Replace with env config, enforced INSIDE `EmailService.send()` (not at call sites):
-
-```
-EMAIL_TEST_MODE=true            # while true, every email goes to the test recipient
-EMAIL_TEST_RECIPIENT=you@example.com
-```
-
-- When on: recipient replaced, subject prefixed `[TEST → original@dest]`, `emails.wasTestMode = true`.
-- `EmailService` throws at startup if `EMAIL_TEST_MODE` is unset — an explicit `false` is
-  required to send real email. Frontend shows a persistent banner when test mode is on
-  (exposed via a config endpoint).
+*(Rewritten 2026-07-24 — Resend/`EmailService` removed; Smartlead owns all sending.)*
+`EMAIL_TEST_MODE` now guards the **Smartlead push** instead: while `true`,
+`buildPushLead` replaces the lead's outreach email with
+`<companyname>@katyusha.app` (catch-all domain — every test lead gets a unique,
+receivable address identifying the company). Enforced inside `buildPushLead`, never
+at call sites; an explicit `false` is required to push real addresses. The frontend
+keeps the persistent test-mode banner.
 
 ### Full env/secrets list (V1)
 
-`DATABASE_URL` (exists) · `EMAIL_TEST_MODE` · `EMAIL_TEST_RECIPIENT` ·
-`RESEND_API_KEY` · `RESEND_FROM_EMAIL` · `RESEND_WEBHOOK_SECRET` ·
+`DATABASE_URL` (exists) · `EMAIL_TEST_MODE` (Smartlead push redirect — see §6; Resend
+keys removed 2026-07-24 with the Resend/Jambonz code) ·
 `SCRAPIO_API_KEY` · `APOLLO_API_KEY` · `HEYGEN_API_KEY` ·
 `GOOGLE_PLACES_API_KEY` ·
 `PDL_API_KEY` · `HUNTER_API_KEY` · `FULLENRICH_API_KEY` · `FIRECRAWL_API_KEY` ·
 `OPENROUTER_API_KEY` (enrichment providers, added 2026-07-12 — see `.claude/ENRICHMENT.md`) ·
+`SMARTLEAD_API_KEY` (cold email sending, added 2026-07-23 — see `.claude/smartlead-integration.md`) ·
+`KONCI_API_URL` · `KONCI_LEADS_API_SECRET` (Konci platform internal leads API, staging — added 2026-07-23) ·
 `UNIFI_CLIENT_ID` · `UNIFI_CLIENT_SECRET` · `UNIFI_DISCOVERY_URL` ·
 `AUTH_SECRET` (session signing) · `APP_URL` (tracking/video links) ·
-R2 bucket binding `VIDEOS` (wrangler.jsonc).
+R2 bucket binding `VIDEOS` (wrangler.jsonc, `"remote": true` — local dev writes the real
+bucket) · `VIDEOS_PUBLIC_URL` (wrangler.jsonc var: the bucket's public r2.dev/custom
+domain; when set, thumbnails + video streams are served from the R2 CDN instead of
+through the Worker — see `.claude/smartlead-integration.md` S4a update 2026-07-24).
 
 All third-party keys were copied from the old repo's `.env.local` into `apps/api/.dev.vars`
-(2026-07-11); set production values with `wrangler secret put`. Telephony keys
-(`JAMBONZ_API_URL/KEY/ACCOUNT_SID`) added 2026-07-12 — see `.claude/TELEPHONY.md`.
-(Corrected 2026-07-12: the old env's `KONCI_SERVICE_TOKEN` + `API_BASE_URL` point at the
-old repo's *own* API, not a separate Konci platform API — the telephony platform API is
-the Jambonz server itself.)
+(2026-07-11); set production values with `wrangler secret put`.
+(Removed 2026-07-24: Resend service/webhooks/playground and the Jambonz
+service/playground, with their `RESEND_*` / `JAMBONZ_*` / `EMAIL_TEST_RECIPIENT` keys —
+Smartlead owns email, and demo lines come from the Konci platform registration
+pipeline. `.claude/TELEPHONY.md` is kept as background reference only.)
 
 ## 7. Frontend pages (Nuxt)
 
@@ -285,6 +286,9 @@ the Jambonz server itself.)
 - `/avatars` — grid with previews, "Sync from HeyGen" button, activate/deactivate.
 - `/templates` — list + editor (subject, HTML body, video script, avatar picker,
   placeholder reference, live preview with a sample lead, "Generate test video").
+- `/videos` — all HeyGen renders (lead, template, status, cost, watch/copy) + a
+  "Check processing" button that runs the poll tick on demand (added 2026-07-24;
+  needed because `wrangler dev` never fires the cron, so renders looked stuck).
 - `/campaigns` — list with progress bars; create wizard: (1) name+limits, (2) steps
   (template + delay per step), (3) leads (manual picks or filter query; mark `withVideo`
   subset — manual or "top N by score"), (4) review & launch.
@@ -360,6 +364,27 @@ export + `triggers.crons` every 5 min; `apps/worker` retired — see §2/§5).
 
 **Phase B5 — Stats & polish**: dashboard queries **DONE in B4** (`StatsService`) · remaining:
 CSV export · failure alerting.
+
+**Phases S1–S6 — Smartlead integration** *(2026-07-23: ALL PHASES S1–S6 DONE — S5 awaiting first real sends to see live rows)*: see
+`.claude/smartlead-integration.md` — Smartlead replaces internal campaign sending;
+this system becomes lead miner + list organizer + video maker + stats mirror. New
+tables so far: `lead_lists`, `lead_list_members` (S2). Frontend: `/lists`, `/lists/:id`,
+bulk "Add to list" on `/leads`, "Lists" sidebar item. **S4a (2026-07-23): templates went
+VIDEO-FIRST** — `templates.subject/body` are now nullable legacy fields (email copy is
+authored in Smartlead), templates gained `voiceId`, videos gained an R2 thumbnail, and
+leads gained `videoUrl`/`videoThumbnailUrl` (auto-set when a render completes; pushed to
+Smartlead as custom fields). §3's Template description and §7's `/templates` page
+description are superseded accordingly.
+
+> **MAJOR AMENDMENT 2026-07-23 (owner order): internal campaign machinery REMOVED.**
+> `campaigns` / `campaign_steps` / `campaign_leads` tables dropped, `templates.subject/
+> body` dropped (video-only templates), CampaignService + routes + frontend pages
+> deleted. §3's Campaign* models, §5's send tick, and §7's /campaigns pages are
+> HISTORICAL. The §5 scheduler now runs: video polling → Konci register → Konci poll →
+> list sync (see `.claude/smartlead-integration.md` §9 for the Konci platform
+> registration flow — table `konci_registrations`, hard gate before any Smartlead
+> push). Lists activate explicitly (DRAFT → ACTIVE) before anything sends. Resend +
+> emails/email_events/webhooks/unsubscribe remain for transactional/test email.
 
 **Later (explicitly out of V1):** Konci platform API integration (auto-provision demo
 number/PIN, call + PIN-entry tracking — likely APIs or direct DB access, TBD by Konci) ·

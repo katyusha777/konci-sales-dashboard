@@ -10,3 +10,13 @@ export const TEMPLATE_PLACEHOLDERS = [
   'demo_pin',
   'unsubscribe_url',
 ] as const
+
+// The subset that makes sense inside a VIDEO script (spoken aloud — no URLs).
+export const VIDEO_PLACEHOLDERS = [
+  'business_name',
+  'contact_first_name',
+  'industry',
+  'city',
+  'demo_phone',
+  'demo_pin',
+] as const

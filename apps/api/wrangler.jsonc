@@ -13,11 +13,19 @@
     // UTC. One trigger runs both ticks sequentially.
     "crons": ["*/5 * * * *"]
   },
-  // Generated avatar videos: downloaded from HeyGen → stored here → streamed via /api/v/:token/stream.
-  // Local `wrangler dev` simulates this bucket; prod needs: wrangler r2 bucket create konci-videos
+  // Generated avatar videos: downloaded from HeyGen → stored here, served from the
+  // bucket's public URL (VIDEOS_PUBLIC_URL; /api/v/:token/stream is the fallback).
+  // "remote": true = local dev writes to the REAL bucket, so videos generated on
+  // localhost get working public CDN URLs.
   "r2_buckets": [
-    { "binding": "VIDEOS", "bucket_name": "konci-videos" }
-  ]
+    { "binding": "VIDEOS", "bucket_name": "konci-videos", "remote": true }
+  ],
+  "vars": {
+    // Public base URL of the konci-videos bucket (r2.dev domain or a custom domain).
+    // Enable with: wrangler r2 bucket dev-url enable konci-videos — then paste the URL
+    // here. Empty = serve videos/thumbnails through the Worker (localhost-only).
+    "VIDEOS_PUBLIC_URL": "https://pub-c9cf7f701ebe42a99eb2b225e9e2fb8b.r2.dev"
+  }
   // Secrets (e.g. DATABASE_URL) live in .dev.vars locally and are set in
   // production with: wrangler secret put DATABASE_URL
 }

@@ -1,6 +1,7 @@
-// Templates — email (subject + HTML body) plus an optional video part in one of two
-// modes: a plain avatar video (avatarId + videoScript) or a HeyGen studio template
-// (heygenTemplateId + videoScenes, one text per scene). Editable in place, no versioning.
+// Templates — VIDEO templates (script/scenes with {{placeholders}}), two modes: a plain
+// avatar video (avatarId + videoScript + optional voiceId override) or a HeyGen studio
+// template (heygenTemplateId + videoScenes, one text per scene). Editable in place, no
+// versioning. (The campaign-era email part was removed 2026-07-23 — Smartlead owns email.)
 
 import type { createPrisma } from '../lib/prisma'
 import { HeygenService } from './heygen.service'
@@ -10,11 +11,10 @@ type PrismaClient = ReturnType<typeof createPrisma>
 export interface TemplateSaveInput {
   id?: string | null
   name: string
-  subject: string
-  body: string
   videoScript?: string | null
   videoScenes?: Array<string> | null
   avatarId?: string | null
+  voiceId?: string | null
   heygenTemplateId?: string | null
 }
 
@@ -26,16 +26,25 @@ export abstract class TemplateService {
   static save(prisma: PrismaClient, input: TemplateSaveInput) {
     const data = {
       name: input.name,
-      subject: input.subject,
-      body: input.body,
       videoScript: input.videoScript ?? null,
       videoScenes: input.videoScenes ?? [],
       avatarId: input.avatarId ?? null,
+      voiceId: input.voiceId ?? null,
       heygenTemplateId: input.heygenTemplateId ?? null,
     }
     return input.id
       ? prisma.template.update({ where: { id: input.id }, data })
       : prisma.template.create({ data })
+  }
+
+  // Videos rendered from it survive (their templateId nulls out — optional relation).
+  static remove(prisma: PrismaClient, id: string) {
+    return prisma.template.delete({ where: { id } })
+  }
+
+  /** HeyGen voices for the template editor's voice picker. */
+  static heygenVoices(env: Env) {
+    return HeygenService.listVoices(env)
   }
 
   /**

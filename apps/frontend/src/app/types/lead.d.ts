@@ -43,6 +43,11 @@ export interface ILead {
   konciCustomerId: string | null
   demoPhone: string | null
   demoPin: string | null
+  videoUrl: string | null
+  videoThumbnailUrl: string | null
+  outreachEmail: string | null
+  outreachContactId: string | null
+  outreachEmailReason: string | null
   totalCostUsd: number
   createdAt: string
   updatedAt: string
@@ -92,10 +97,45 @@ export interface IEmailSummary {
   id: string
   subject: string
   status: TEmailStatus
-  campaignName: string | null
   wasTestMode: boolean
   sentAt: string | null
   events: Array<IEmailEventSummary>
+}
+
+export type TKonciRegistrationStatus = 'PENDING' | 'PREPARED' | 'NEEDS_PHONE' | 'FAILED' | 'SKIPPED'
+
+export interface IKonciRegistration {
+  status: TKonciRegistrationStatus
+  konciLeadId: string
+  claimUrl: string | null
+  claimExpiresAt: string | null
+  error: string | null
+  lastPolledAt: string | null
+  createdAt: string
+}
+
+export interface ILeadVideo {
+  id: string
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  error: string | null
+  token: string
+  hasThumbnail: boolean
+  durationSeconds: number | null
+  templateName: string | null
+  isTest: boolean
+  createdAt: string
+}
+
+export interface IOutreachStat {
+  sequenceNumber: number
+  externalCampaignId: string
+  email: string
+  sentAt: string | null
+  openCount: number
+  clickCount: number
+  repliedAt: string | null
+  bounced: boolean
+  pulledAt: string
 }
 
 export interface ILeadDetail extends ILead {
@@ -103,6 +143,9 @@ export interface ILeadDetail extends ILead {
   notes: Array<ILeadNote>
   costs: Array<ILeadCost>
   emails: Array<IEmailSummary>
+  videos: Array<ILeadVideo>
+  konciRegistration: IKonciRegistration | null
+  outreachStats: Array<IOutreachStat>
 }
 
 // Manual "Add lead" form

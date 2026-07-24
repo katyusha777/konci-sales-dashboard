@@ -9,4 +9,5 @@ export const publicVideoRoutes = new Hono<AppEnv>()
 
 publicVideoRoutes.get('/:token', action(VideoController, 'page'))
 publicVideoRoutes.get('/:token/stream', action(VideoController, 'stream'))
+publicVideoRoutes.get('/:token/thumb', action(VideoController, 'thumb'))
 publicVideoRoutes.post('/:token/event', action(VideoController, 'event'))

@@ -9,7 +9,7 @@ const token = route.params.token as string
 const { data: page } = await useAsyncData(`video.${token}`, () => VideosApi.page(token).catch(() => null))
 
 const videoEl = ref<HTMLVideoElement | null>(null)
-const streamUrl = computed(() => VideosApi.streamUrl(token))
+const streamUrl = computed(() => page.value?.videoSrc ?? VideosApi.streamUrl(token))
 
 // Fire each engagement event once. PROGRESS_25/50/75 as the viewer crosses each quartile.
 const fired = new Set<string>()
@@ -79,7 +79,7 @@ function onTimeUpdate() {
               Call
             </div>
             <div class="font-semibold">
-              {{ page.demoPhone }}
+              {{ formatPhoneNational(page.demoPhone) }}
             </div>
           </div>
           <div v-if="page.demoPin" class="border border-default rounded-lg px-4 py-2">
@@ -91,7 +91,10 @@ function onTimeUpdate() {
             </div>
           </div>
         </div>
-        <UButton size="lg" label="Get this for your business" trailing-icon="i-lucide-arrow-right" class="self-center" />
+        <UButton
+          size="lg" label="Get this for your business" trailing-icon="i-lucide-arrow-right" class="self-center"
+          :to="page.claimUrl ?? 'https://konci.ai'" target="_blank"
+        />
       </div>
     </UCard>
 

@@ -2,8 +2,6 @@ import type { ApiResponse, AppRequest } from '../lib/controller'
 import { Controller } from '../lib/controller'
 import type { ApolloMatchInput, ApolloMatchResult, ApolloOrgResult } from '../services/apollo.service'
 import { ApolloService } from '../services/apollo.service'
-import { EmailService } from '../services/email.service'
-import type { SendEmailResult } from '../services/email.service'
 import { FirecrawlService } from '../services/firecrawl.service'
 import type { FirecrawlResult } from '../services/firecrawl.service'
 import { FullenrichService } from '../services/fullenrich.service'
@@ -14,14 +12,16 @@ import { HeygenService } from '../services/heygen.service'
 import type { HeygenAvatar, HeygenTemplateSummary, HeygenTemplateVariable, HeygenVideoStatus, HeygenVoice } from '../services/heygen.service'
 import { HunterService } from '../services/hunter.service'
 import type { HunterDomainResult, HunterEmailResult } from '../services/hunter.service'
-import { JambonzService } from '../services/jambonz.service'
-import type { JambonzApplication, JambonzNumber, JambonzTrialResult } from '../services/jambonz.service'
+import { KonciService } from '../services/konci.service'
+import type { KonciLeadResult, KonciRegisterInput } from '../services/konci.service'
 import { OpenrouterService } from '../services/openrouter.service'
 import type { ExtractSignalsResult } from '../services/openrouter.service'
 import { PdlService } from '../services/pdl.service'
 import type { PdlCompanyInput, PdlCompanyResult, PdlPersonInput, PdlPersonResult, PdlSearchPeopleInput } from '../services/pdl.service'
 import { ScrapioService } from '../services/scrapio.service'
 import type { ScrapioResult, ScrapioSearchParams } from '../services/scrapio.service'
+import { SmartleadService } from '../services/smartlead.service'
+import type { SmartleadAnalytics, SmartleadCampaign, SmartleadCampaignLead, SmartleadEmailAccount, SmartleadLeadStat, SmartleadPushLead, SmartleadPushResult } from '../services/smartlead.service'
 
 // Playground endpoints: one place to live-test every third-party service.
 // Errors are surfaced verbatim (message + info) so the playground UI shows
@@ -128,36 +128,6 @@ export default class PlaygroundController extends Controller {
     }
     catch (err) {
       return this.error('HeyGen status check failed', (err as Error).message)
-    }
-  }
-
-  // ── Email (Resend) ──────────────────────────────────────────────────────────
-
-  async emailConfig(): Promise<ApiResponse<{ testMode: boolean, testRecipient: string | null, from: string }>> {
-    try {
-      return this.data({
-        testMode: EmailService.isTestMode(this.c.env),
-        testRecipient: this.c.env.EMAIL_TEST_RECIPIENT ?? null,
-        from: this.c.env.RESEND_FROM_EMAIL,
-      })
-    }
-    catch (err) {
-      return this.error('Email config invalid', (err as Error).message)
-    }
-  }
-
-  async emailSend(req: AppRequest<{ Body: { to?: string, subject?: string, html?: string, withUnsubscribeHeaders?: boolean } }>): Promise<ApiResponse<SendEmailResult & { unsubscribeHeaders: Record<string, string> | null }>> {
-    const { to, subject, html, withUnsubscribeHeaders } = req.body
-    if (!to || !subject || !html)
-      return this.error('to, subject and html are required')
-    try {
-      // Demo token — campaign sends (B4) will pass the Email row's real trackingToken
-      const headers = withUnsubscribeHeaders ? EmailService.buildListUnsubscribeHeaders(this.c.env, 'playground-demo-token') : undefined
-      const result = await EmailService.send(this.c.env, { to, subject, html, headers })
-      return this.data({ ...result, unsubscribeHeaders: headers ?? null })
-    }
-    catch (err) {
-      return this.error('Email send failed', (err as Error).message)
     }
   }
 
@@ -398,46 +368,118 @@ export default class PlaygroundController extends Controller {
     }
   }
 
-  // ── Jambonz (telephony) ─────────────────────────────────────────────────────
+  // ── Smartlead (cold email sending) ──────────────────────────────────────────
 
-  async jambonzNumbers(): Promise<ApiResponse<Array<JambonzNumber>>> {
+  async smartleadCampaigns(): Promise<ApiResponse<Array<SmartleadCampaign>>> {
     try {
-      return this.data(await JambonzService.listNumbers(this.c.env))
+      return this.data(await SmartleadService.listCampaigns(this.c.env))
     }
     catch (err) {
-      return this.error('Jambonz number list failed', (err as Error).message)
+      return this.error('Smartlead campaign list failed', (err as Error).message)
     }
   }
 
-  async jambonzApplications(): Promise<ApiResponse<Array<JambonzApplication>>> {
+  async smartleadCampaign(req: AppRequest<{ Params: { id: string } }>): Promise<ApiResponse<SmartleadCampaign>> {
     try {
-      return this.data(await JambonzService.listApplications(this.c.env))
+      return this.data(await SmartleadService.getCampaign(this.c.env, req.params.id))
     }
     catch (err) {
-      return this.error('Jambonz application list failed', (err as Error).message)
+      return this.error('Smartlead campaign lookup failed', (err as Error).message)
     }
   }
 
-  async jambonzProvision(req: AppRequest<{ Body: { reference?: string, pin?: string } }>): Promise<ApiResponse<JambonzTrialResult>> {
-    if (!req.body.reference)
-      return this.error('reference is required')
+  async smartleadAnalytics(req: AppRequest<{ Params: { id: string } }>): Promise<ApiResponse<SmartleadAnalytics>> {
     try {
-      return this.data(await JambonzService.provisionTrial(this.c.env, req.body.reference, req.body.pin))
+      return this.data(await SmartleadService.getCampaignAnalytics(this.c.env, req.params.id))
     }
     catch (err) {
-      return this.error('Jambonz trial provision failed', (err as Error).message)
+      return this.error('Smartlead analytics failed', (err as Error).message)
     }
   }
 
-  async jambonzRelease(req: AppRequest<{ Body: { phone?: string } }>): Promise<ApiResponse<{ released: string }>> {
-    if (!req.body.phone)
-      return this.error('phone is required')
+  async smartleadStatistics(req: AppRequest<{ Params: { id: string }, Query: { offset?: string, limit?: string, eventTimeGt?: string } }>): Promise<ApiResponse<{ total: number | null, stats: Array<SmartleadLeadStat>, raw: unknown }>> {
     try {
-      await JambonzService.releaseNumber(this.c.env, req.body.phone)
-      return this.data({ released: req.body.phone })
+      return this.data(await SmartleadService.getCampaignStatistics(this.c.env, req.params.id, {
+        offset: req.query.offset ? Number(req.query.offset) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+        eventTimeGt: req.query.eventTimeGt,
+      }))
     }
     catch (err) {
-      return this.error('Jambonz release failed', (err as Error).message)
+      return this.error('Smartlead statistics failed', (err as Error).message)
     }
   }
+
+  async smartleadCampaignLeads(req: AppRequest<{ Params: { id: string }, Query: { offset?: string, limit?: string } }>): Promise<ApiResponse<{ total: number | null, leads: Array<SmartleadCampaignLead>, raw: unknown }>> {
+    try {
+      return this.data(await SmartleadService.listCampaignLeads(this.c.env, req.params.id, {
+        offset: req.query.offset ? Number(req.query.offset) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      }))
+    }
+    catch (err) {
+      return this.error('Smartlead campaign leads failed', (err as Error).message)
+    }
+  }
+
+  async smartleadAddLead(req: AppRequest<{ Params: { id: string }, Body: SmartleadPushLead }>): Promise<ApiResponse<SmartleadPushResult>> {
+    if (!req.body.email)
+      return this.error('email is required')
+    try {
+      return this.data(await SmartleadService.addLeadsToCampaign(this.c.env, req.params.id, [req.body]))
+    }
+    catch (err) {
+      return this.error('Smartlead lead push failed', (err as Error).message)
+    }
+  }
+
+  async smartleadEmailAccounts(): Promise<ApiResponse<Array<SmartleadEmailAccount>>> {
+    try {
+      return this.data(await SmartleadService.listEmailAccounts(this.c.env))
+    }
+    catch (err) {
+      return this.error('Smartlead email account list failed', (err as Error).message)
+    }
+  }
+
+  // ── Konci platform (internal leads API — staging) ───────────────────────────
+
+  async konciRegister(req: AppRequest<{ Body: KonciRegisterInput }>): Promise<ApiResponse<KonciLeadResult>> {
+    if (!req.body.businessName || !req.body.website)
+      return this.error('businessName and website are required')
+    try {
+      return this.data(await KonciService.register(this.c.env, req.body))
+    }
+    catch (err) {
+      return this.error('Konci register failed', (err as Error).message)
+    }
+  }
+
+  async konciLead(req: AppRequest<{ Params: { id: string } }>): Promise<ApiResponse<KonciLeadResult>> {
+    try {
+      return this.data(await KonciService.getLead(this.c.env, req.params.id))
+    }
+    catch (err) {
+      return this.error('Konci lead lookup failed', (err as Error).message)
+    }
+  }
+
+  async konciRetry(req: AppRequest<{ Params: { id: string } }>): Promise<ApiResponse<KonciLeadResult>> {
+    try {
+      return this.data(await KonciService.retry(this.c.env, req.params.id))
+    }
+    catch (err) {
+      return this.error('Konci retry failed', (err as Error).message)
+    }
+  }
+
+  async konciClaimLink(req: AppRequest<{ Params: { id: string } }>): Promise<ApiResponse<KonciLeadResult>> {
+    try {
+      return this.data(await KonciService.mintClaimLink(this.c.env, req.params.id))
+    }
+    catch (err) {
+      return this.error('Konci claim link failed', (err as Error).message)
+    }
+  }
+
 }

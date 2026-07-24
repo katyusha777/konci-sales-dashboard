@@ -14,13 +14,16 @@ const inPlayground = computed(() => route.path.startsWith('/playground'))
 
 const links = computed<Array<Array<NavigationMenuItem>>>(() => [
   [
+    { label: 'Menu', type: 'label' },
     { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/' },
     { label: 'Leads', icon: 'i-lucide-users', to: '/leads' },
-    { label: 'Campaigns', icon: 'i-lucide-send', to: '/campaigns' },
+    { label: 'Lists', icon: 'i-lucide-list-checks', to: '/lists' },
     { label: 'Templates', icon: 'i-lucide-file-text', to: '/templates' },
+    { label: 'Videos', icon: 'i-lucide-clapperboard', to: '/videos' },
     { label: 'Avatars', icon: 'i-lucide-user-round', to: '/avatars' },
   ],
   [
+    { label: 'Developer', type: 'label' },
     {
       label: 'Playground',
       icon: 'i-lucide-flask-conical',
@@ -32,13 +35,13 @@ const links = computed<Array<Array<NavigationMenuItem>>>(() => [
         { label: 'Google Places ✅', to: '/playground/google-places' },
         { label: 'Firecrawl ✅', to: '/playground/firecrawl' },
         { label: 'OpenRouter ✅', to: '/playground/openrouter' },
-        { label: 'Apollo ⚠️', to: '/playground/apollo' },
+        { label: 'Apollo ✅', to: '/playground/apollo' },
         { label: 'PDL ✅', to: '/playground/pdl' },
         { label: 'Hunter ✅', to: '/playground/hunter' },
         { label: 'FullEnrich ✅', to: '/playground/fullenrich' },
         { label: 'HeyGen ✅', to: '/playground/heygen' },
-        { label: 'Email ✅', to: '/playground/email' },
-        { label: 'Jambonz ⚠️', to: '/playground/jambonz' },
+        { label: 'Smartlead ⚠️', to: '/playground/smartlead' },
+        { label: 'Konci ❓', to: '/playground/konci' },
       ],
     },
   ],
@@ -49,9 +52,9 @@ const links = computed<Array<Array<NavigationMenuItem>>>(() => [
   <UDashboardGroup>
     <UDashboardSidebar collapsible :min-size="12" :default-size="16" :max-size="24">
       <template #header="{ collapsed }">
-        <NuxtLink to="/" aria-label="Konci dashboard" class="flex items-center" :class="{ 'mx-auto': collapsed }">
-          <img v-if="!collapsed" src="/konci.webp" alt="Konci" class="h-6 w-auto dark:invert">
-          <img v-else src="/konci-mark.png" alt="Konci" class="h-6 w-auto dark:invert">
+        <NuxtLink to="/" aria-label="Konci dashboard" class="flex items-center py-1.5" :class="{ 'mx-auto': collapsed }">
+          <img v-if="!collapsed" src="/konci.webp" alt="Konci" class="h-7 w-auto dark:invert">
+          <img v-else src="/konci-mark.png" alt="Konci" class="h-7 w-auto dark:invert">
         </NuxtLink>
       </template>
 
@@ -73,9 +76,10 @@ const links = computed<Array<Array<NavigationMenuItem>>>(() => [
           </UBadge>
           <UIcon v-else name="i-lucide-flask-conical" class="size-4 text-warning" />
 
-          <USeparator />
-
-          <div class="flex items-center gap-2.5 w-full" :class="{ 'justify-center': collapsed }">
+          <div
+            class="flex items-center gap-2.5 w-full rounded-xl"
+            :class="collapsed ? 'justify-center' : 'bg-elevated/60 px-2.5 py-2'"
+          >
             <UAvatar :alt="user?.name ?? user?.email ?? 'K'" icon="i-lucide-user" size="sm" />
             <div v-if="!collapsed" class="min-w-0 flex-1">
               <p class="text-sm font-medium truncate">

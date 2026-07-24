@@ -3,7 +3,7 @@ import type { IApolloLiveInput, IApolloLiveOrg, IApolloLiveResult } from '~/app/
 import { ApiError } from '~/app/api/client'
 import { PlaygroundApi } from '~/app/api/playground.api'
 
-// ── Company match (works even where person match is plan-gated) ─────────────
+// ── Company match (by domain) ───────────────────────────────────────────────
 const orgDomain = ref('')
 const orgLoading = ref(false)
 const orgSearched = ref(false)
@@ -82,9 +82,9 @@ async function match() {
     <template #body>
       <div class="flex flex-col gap-6 max-w-4xl">
         <UAlert
-          color="warning" variant="subtle" icon="i-lucide-triangle-alert"
-          title="⚠️ Partially working (live test 2026-07-12) — person match is plan-gated"
-          description="Company match works. Person match returns 403: “api/v1/people/match is not accessible with this api_key on a free plan.” Fix: upgrade the Apollo plan at app.apollo.io to test person match — no code change needed. PDL covers this role in the waterfall meanwhile."
+          color="success" variant="subtle" icon="i-lucide-check-circle"
+          title="✅ Working (live test 2026-07-14) — person match and company match both live"
+          description="Both endpoints return live results with the current API key. Person match returns verified work emails (e.g. john@stripe.com, confidence 9/10). A successful person match consumes an Apollo credit."
         />
 
         <!-- Company match -->
@@ -133,7 +133,7 @@ async function match() {
         <div class="grid lg:grid-cols-2 gap-6">
         <UCard>
           <template #header>
-            <span class="font-medium">Person match <span class="text-xs text-muted font-normal">(currently plan-gated — kept for when the plan upgrades)</span></span>
+            <span class="font-medium">Person match <span class="text-xs text-muted font-normal">(live — consumes an Apollo credit on a successful match)</span></span>
           </template>
           <div class="flex flex-col gap-3">
             <SampleChips :samples="personSamples" />

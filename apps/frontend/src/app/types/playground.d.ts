@@ -89,20 +89,6 @@ export interface IHeygenLiveVideoStatus {
   error: string | null
 }
 
-export interface IEmailLiveConfig {
-  testMode: boolean
-  testRecipient: string | null
-  from: string
-}
-
-export interface IEmailLiveResult {
-  id: string
-  to: string
-  testMode: boolean
-  originalTo: string
-  unsubscribeHeaders: Record<string, string> | null
-}
-
 export interface IApolloLiveInput {
   firstName?: string
   lastName?: string
@@ -300,25 +286,107 @@ export interface IGooglePlacesLiveResult {
   raw: unknown
 }
 
+// ── Konci platform (internal leads API) ────────────────────────────────────
+
+export interface IKonciLiveResult {
+  konciLeadId: string
+  status: string
+  claimUrl: string | null
+  claimExpiresAt: string | null
+  raw: unknown
+}
+
 // ── Jambonz (telephony) ─────────────────────────────────────────────────────
 
-export interface IJambonzLiveNumber {
-  phoneNumberSid: string
-  number: string
-  applicationSid: string | null
-  voipCarrierSid: string | null
-  raw: unknown
-}
+// ── Smartlead (cold email sending) ──────────────────────────────────────────
 
-export interface IJambonzLiveApplication {
-  applicationSid: string
+export interface ISmartleadLiveCampaign {
+  id: number
   name: string
+  status: string
+  createdAt: string | null
+  maxLeadsPerDay: number | null
+  minTimeBtwnEmails: number | null
+  timezone: string | null
   raw: unknown
 }
 
-export interface IJambonzLiveTrial {
-  phone: string
-  pin: string
+export interface ISmartleadLiveAnalytics {
+  campaignName: string | null
+  status: string | null
+  totalLeads: number | null
+  sentCount: number | null
+  openCount: number | null
+  clickCount: number | null
+  replyCount: number | null
+  bounceCount: number | null
+  unsubscribedCount: number | null
+  raw: unknown
+}
+
+export interface ISmartleadLiveLeadStat {
+  leadEmail: string | null
+  leadName: string | null
+  sequenceNumber: number | null
+  emailSubject: string | null
+  sentTime: string | null
+  openTime: string | null
+  openCount: number | null
+  clickTime: string | null
+  clickCount: number | null
+  replyTime: string | null
+  isBounced: boolean
+  raw: unknown
+}
+
+export interface ISmartleadLiveStatistics {
+  total: number | null
+  stats: Array<ISmartleadLiveLeadStat>
+  raw: unknown
+}
+
+export interface ISmartleadLiveCampaignLead {
+  smartleadLeadId: number | null
+  email: string | null
+  firstName: string | null
+  lastName: string | null
+  companyName: string | null
+  status: string | null
+  createdAt: string | null
+  raw: unknown
+}
+
+export interface ISmartleadLiveCampaignLeads {
+  total: number | null
+  leads: Array<ISmartleadLiveCampaignLead>
+  raw: unknown
+}
+
+export interface ISmartleadLivePushLead {
+  email: string
+  firstName?: string
+  lastName?: string
+  companyName?: string
+  website?: string
+  phoneNumber?: string
+  location?: string
+  linkedinProfile?: string
+  customFields?: Record<string, string>
+}
+
+export interface ISmartleadLivePushResult {
+  addedCount: number | null
+  skippedCount: number | null
+  skippedLeads: unknown
+  raw: unknown
+}
+
+export interface ISmartleadLiveEmailAccount {
+  id: number | null
+  fromName: string | null
+  fromEmail: string | null
+  warmupStatus: string | null
+  dailyLimit: number | null
   raw: unknown
 }
 

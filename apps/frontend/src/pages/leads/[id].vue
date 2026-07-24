@@ -12,27 +12,127 @@ const id = route.params.id as string
 const { data: lead, status, refresh } = await useAsyncData(`leads.${id}`, () => LeadsApi.get(id))
 const { data: templates } = await useAsyncData('templates.list', () => TemplatesApi.list())
 
-// Test video (per-lead, like the old pipeline had)
+// Generate a video from a video template (test = watermarked/free, real = paid render).
 const videoTemplateOptions = computed(() => (templates.value ?? [])
   .filter(t => t.videoScript !== null || t.heygenTemplateId)
   .map(t => ({ label: t.name, value: t.id })))
-const testVideoTemplateId = ref<string | undefined>()
-const generatingTestVideo = ref(false)
+const videoTemplateId = ref<string | undefined>()
+const realRender = ref(false)
+const generatingVideo = ref(false)
 
-async function generateTestVideo() {
-  if (!testVideoTemplateId.value)
+async function generateVideo() {
+  if (!videoTemplateId.value)
     return
-  generatingTestVideo.value = true
+  generatingVideo.value = true
   try {
-    await VideosApi.generateTest(id, testVideoTemplateId.value)
-    toast.add({ title: 'Test video queued', description: 'HeyGen is rendering it — it will appear here once the scheduler downloads it.', color: 'success' })
+    await VideosApi.generate(id, videoTemplateId.value, !realRender.value)
+    toast.add({ title: realRender.value ? 'Video queued (real render)' : 'Test video queued', description: 'HeyGen is rendering — it appears in the Videos tab once the scheduler downloads it (~5 min after completion).', color: 'success' })
+    await refresh()
   }
   catch (err) {
     toast.add({ title: 'Could not queue video', description: (err as ApiError).message, color: 'error' })
   }
   finally {
-    generatingTestVideo.value = false
+    generatingVideo.value = false
   }
+}
+
+function copyVideoLink(token: string) {
+  navigator.clipboard.writeText(`${location.origin}/v/${token}`)
+  toast.add({ title: 'Public video link copied', color: 'success' })
+}
+
+// Manual recheck for PROCESSING renders — local dev has no cron to poll HeyGen.
+const pollingVideos = ref(false)
+async function pollVideos() {
+  pollingVideos.value = true
+  try {
+    const s = await VideosApi.poll()
+    await refresh()
+    toast.add({
+      title: `${s.completed} completed · ${s.failed} failed · ${s.processing} still rendering`,
+      color: s.failed ? 'warning' : 'success',
+    })
+  }
+  catch (err) {
+    toast.add({ title: 'Could not check videos', description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    pollingVideos.value = false
+  }
+}
+const hasProcessingVideos = computed(() => (lead.value?.videos ?? []).some(v => v.status === 'PROCESSING' || v.status === 'PENDING'))
+
+// ── Outreach email (AI decision-maker pick, S4b) ──
+const pickingEmail = ref(false)
+async function pickOutreachEmail(force: boolean) {
+  pickingEmail.value = true
+  try {
+    const result = await LeadsApi.pickOutreachEmail(id, force)
+    await refresh()
+    toast.add({
+      title: result.picked ? `Outreach email: ${result.email}` : 'No email picked',
+      description: result.reason ?? undefined,
+      color: result.picked ? 'success' : 'warning',
+    })
+  }
+  catch (err) {
+    const e = err as ApiError
+    toast.add({ title: e.message || 'Pick failed', description: e.info ?? undefined, color: 'error' })
+  }
+  finally {
+    pickingEmail.value = false
+  }
+}
+
+const editingOutreach = ref(false)
+const outreachDraft = ref('')
+const outreachOptions = computed(() => {
+  const emails = new Set<string>()
+  for (const c of lead.value?.contacts ?? []) {
+    if (c.email)
+      emails.add(c.email)
+  }
+  if (lead.value?.email)
+    emails.add(lead.value.email)
+  return [...emails]
+})
+
+async function saveOutreachEmail() {
+  try {
+    await LeadsApi.update(id, { outreachEmail: outreachDraft.value.trim() || null })
+    editingOutreach.value = false
+    await refresh()
+    toast.add({ title: 'Outreach email saved', color: 'success' })
+  }
+  catch (err) {
+    toast.add({ title: 'Could not save', description: (err as ApiError).message, color: 'error' })
+  }
+}
+
+// ── Konci platform registration (test account + claim link) ──
+const konciBusy = ref(false)
+async function konciAction(fn: () => Promise<unknown>, successTitle: string) {
+  konciBusy.value = true
+  try {
+    await fn()
+    await refresh()
+    toast.add({ title: successTitle, color: 'success' })
+  }
+  catch (err) {
+    const e = err as ApiError
+    toast.add({ title: e.message || 'Konci action failed', description: e.info ?? undefined, color: 'error' })
+  }
+  finally {
+    konciBusy.value = false
+  }
+}
+
+function copyClaimUrl() {
+  if (!lead.value?.konciRegistration?.claimUrl)
+    return
+  navigator.clipboard.writeText(lead.value.konciRegistration.claimUrl)
+  toast.add({ title: 'Claim link copied', color: 'success' })
 }
 
 async function suppress() {
@@ -108,6 +208,7 @@ async function addNote() {
 
 const tabs = [
   { label: 'Contacts', slot: 'contacts', icon: 'i-lucide-users' },
+  { label: 'Videos', slot: 'videos', icon: 'i-lucide-video' },
   { label: 'Emails', slot: 'emails', icon: 'i-lucide-mail' },
   { label: 'Notes', slot: 'notes', icon: 'i-lucide-sticky-note' },
   { label: 'Costs', slot: 'costs', icon: 'i-lucide-circle-dollar-sign' },
@@ -129,10 +230,6 @@ const tabs = [
             icon="i-lucide-bell-off" color="error" variant="ghost" label="Suppress" @click="suppress"
           />
           <UButton icon="i-lucide-sparkles" :loading="enriching" color="neutral" variant="outline" label="Re-enrich" @click="enrich" />
-          <UButton
-            icon="i-lucide-send" label="Add to campaign"
-            @click="toast.add({ title: 'Campaign picker comes with the campaign pages', color: 'info' })"
-          />
         </template>
       </UDashboardNavbar>
     </template>
@@ -195,9 +292,72 @@ const tabs = [
 
             <UCard>
               <template #header>
-                <span class="font-medium">Konci platform</span>
+                <div class="flex items-center justify-between">
+                  <span class="font-medium">Outreach email</span>
+                  <UButton
+                    size="xs" icon="i-lucide-sparkles" color="neutral" variant="ghost"
+                    :label="lead.outreachEmail ? 'Re-pick (AI)' : 'Pick (AI)'"
+                    :loading="pickingEmail" @click="pickOutreachEmail(!!lead.outreachEmail)"
+                  />
+                </div>
+              </template>
+              <div class="flex flex-col gap-2 text-sm">
+                <template v-if="!editingOutreach">
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono" :class="{ 'text-muted': !lead.outreachEmail }">{{ lead.outreachEmail ?? 'not set — sync falls back to best contact' }}</span>
+                    <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit" @click="outreachDraft = lead.outreachEmail ?? ''; editingOutreach = true" />
+                  </div>
+                  <p v-if="lead.outreachEmailReason" class="text-xs text-muted italic">
+                    {{ lead.outreachEmailReason }}
+                  </p>
+                </template>
+                <template v-else>
+                  <UInputMenu v-model="outreachDraft" :items="outreachOptions" create-item class="w-full" placeholder="who@business.com" @create="(v: string) => outreachDraft = v" />
+                  <div class="flex gap-1.5">
+                    <UButton size="xs" label="Save" @click="saveOutreachEmail" />
+                    <UButton size="xs" color="neutral" variant="ghost" label="Cancel" @click="editingOutreach = false" />
+                  </div>
+                </template>
+              </div>
+            </UCard>
+
+            <UCard>
+              <template #header>
+                <div class="flex items-center justify-between">
+                  <span class="font-medium">Konci platform</span>
+                  <StatusBadge v-if="lead.konciRegistration" :status="lead.konciRegistration.status" />
+                </div>
               </template>
               <div class="flex flex-col gap-3">
+                <!-- Test-account registration (required before Smartlead sync) -->
+                <div v-if="!lead.konciRegistration" class="flex flex-col gap-2">
+                  <p class="text-xs text-muted">
+                    No Konci test account yet — required before this lead can be sent.
+                    Registered automatically when the lead joins a list, or now:
+                  </p>
+                  <UButton size="sm" icon="i-lucide-rocket" label="Create Konci account" :loading="konciBusy" :disabled="!lead.website" @click="konciAction(() => LeadsApi.konciRegister(lead!.id), 'Konci registration started — pipeline takes ~80s')" />
+                  <p v-if="!lead.website" class="text-xs text-error">
+                    Needs a website on the lead first.
+                  </p>
+                </div>
+                <div v-else class="flex flex-col gap-2 text-sm">
+                  <div v-if="lead.konciRegistration.claimUrl" class="flex items-center gap-1.5 min-w-0">
+                    <a :href="lead.konciRegistration.claimUrl" target="_blank" class="text-primary text-xs truncate flex-1">{{ lead.konciRegistration.claimUrl }}</a>
+                    <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" aria-label="Copy claim link" @click="copyClaimUrl" />
+                  </div>
+                  <p class="text-xs text-muted">
+                    <template v-if="lead.konciRegistration.claimExpiresAt">Claim expires {{ formatDateTime(lead.konciRegistration.claimExpiresAt) }} · </template>
+                    last checked {{ lead.konciRegistration.lastPolledAt ? formatDateTime(lead.konciRegistration.lastPolledAt) : 'never' }}
+                  </p>
+                  <UAlert v-if="lead.konciRegistration.error" color="error" variant="subtle" icon="i-lucide-triangle-alert" :description="lead.konciRegistration.error" />
+                  <div class="flex gap-1.5 flex-wrap">
+                    <UButton v-if="lead.konciRegistration.status === 'PENDING'" size="xs" icon="i-lucide-refresh-cw" color="neutral" variant="outline" label="Check status" :loading="konciBusy" @click="konciAction(() => LeadsApi.konciRefresh(lead!.id), 'Status refreshed')" />
+                    <UButton v-if="['FAILED', 'NEEDS_PHONE', 'SKIPPED'].includes(lead.konciRegistration.status)" size="xs" icon="i-lucide-rotate-ccw" color="warning" variant="outline" label="Retry pipeline" :loading="konciBusy" @click="konciAction(() => LeadsApi.konciRetry(lead!.id), 'Pipeline re-running — takes ~80s')" />
+                    <UButton v-if="lead.konciRegistration.status === 'PREPARED'" size="xs" icon="i-lucide-link" color="neutral" variant="outline" label="New claim link" :loading="konciBusy" @click="konciAction(() => LeadsApi.konciClaimLink(lead!.id), 'Fresh claim link minted')" />
+                  </div>
+                </div>
+
+                <USeparator />
                 <UFormField label="Customer ID" size="sm">
                   <UInput v-model="konci.konciCustomerId" placeholder="kc_…" class="w-full" />
                 </UFormField>
@@ -215,13 +375,34 @@ const tabs = [
 
             <UCard>
               <template #header>
-                <span class="font-medium">Test video</span>
+                <div class="flex items-center justify-between">
+                  <span class="font-medium">Outreach video</span>
+                  <UBadge v-if="lead.videoUrl" color="success" variant="subtle" size="sm">
+                    ready
+                  </UBadge>
+                </div>
               </template>
               <div class="flex flex-col gap-3">
+                <a v-if="lead.videoUrl" :href="lead.videoUrl" target="_blank" class="block">
+                  <img
+                    v-if="lead.videoThumbnailUrl" :src="lead.videoThumbnailUrl" alt="Outreach video thumbnail"
+                    class="rounded-lg w-full object-cover"
+                  >
+                  <span v-else class="text-sm text-primary">{{ lead.videoUrl }}</span>
+                </a>
+                <p v-if="lead.videoUrl" class="text-xs text-muted">
+                  Synced to Smartlead as <code class="font-mono">video_url</code> / <code class="font-mono">video_thumbnail</code>.
+                </p>
                 <UFormField label="Template" size="sm">
-                  <USelectMenu v-model="testVideoTemplateId" value-key="value" :items="videoTemplateOptions" placeholder="Pick a video template" class="w-full" />
+                  <USelectMenu v-model="videoTemplateId" value-key="value" :items="videoTemplateOptions" placeholder="Pick a video template" class="w-full" />
                 </UFormField>
-                <UButton size="sm" icon="i-lucide-clapperboard" label="Generate test video" :loading="generatingTestVideo" :disabled="!testVideoTemplateId" @click="generateTestVideo" />
+                <UCheckbox v-model="realRender" label="Real render (uses HeyGen credits, ~$0.50)" />
+                <UButton
+                  size="sm" icon="i-lucide-clapperboard"
+                  :label="realRender ? 'Generate video ($)' : 'Generate test video (free, watermarked)'"
+                  :color="realRender ? 'warning' : 'primary'"
+                  :loading="generatingVideo" :disabled="!videoTemplateId" @click="generateVideo"
+                />
               </div>
             </UCard>
 
@@ -262,10 +443,91 @@ const tabs = [
             </UCard>
           </template>
 
+          <template #videos>
+            <UCard>
+              <template v-if="hasProcessingVideos" #header>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-muted">Renders in progress — HeyGen usually takes a few minutes.</span>
+                  <UButton
+                    size="xs" icon="i-lucide-refresh-cw" color="neutral" variant="outline"
+                    label="Check status now" :loading="pollingVideos" @click="pollVideos"
+                  />
+                </div>
+              </template>
+              <div v-if="!lead.videos.length" class="text-sm text-muted py-6 text-center">
+                No videos yet — pick a template in the “Outreach video” card and generate one.
+              </div>
+              <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div v-for="v in lead.videos" :key="v.id" class="bg-elevated/40 rounded-xl overflow-hidden flex flex-col">
+                  <a v-if="v.status === 'COMPLETED'" :href="`/v/${v.token}`" target="_blank" class="block relative group">
+                    <img
+                      v-if="v.hasThumbnail" :src="VideosApi.thumbUrl(v.token)" alt="Video thumbnail"
+                      class="aspect-video object-cover w-full bg-elevated"
+                    >
+                    <div v-else class="aspect-video w-full bg-elevated flex items-center justify-center">
+                      <UIcon name="i-lucide-video" class="size-8 text-muted" />
+                    </div>
+                    <div class="absolute inset-0 flex items-center justify-center opacity-80 group-hover:opacity-100 transition">
+                      <UIcon name="i-lucide-circle-play" class="size-10 text-white drop-shadow" />
+                    </div>
+                  </a>
+                  <div v-else class="aspect-video w-full bg-elevated flex flex-col items-center justify-center gap-1">
+                    <UIcon :name="v.status === 'FAILED' ? 'i-lucide-circle-x' : 'i-lucide-loader-circle'" :class="v.status === 'FAILED' ? 'text-error' : 'animate-spin text-muted'" class="size-6" />
+                    <span v-if="v.error" class="text-xs text-error px-3 text-center">{{ v.error }}</span>
+                  </div>
+                  <div class="p-3 flex flex-col gap-1.5 text-sm">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <StatusBadge :status="v.status" />
+                      <UBadge v-if="v.isTest" color="warning" variant="outline" size="sm">
+                        test
+                      </UBadge>
+                      <UBadge v-if="lead.videoUrl?.endsWith(v.token)" color="success" variant="subtle" size="sm">
+                        outreach video
+                      </UBadge>
+                    </div>
+                    <div class="text-xs text-muted">
+                      {{ v.templateName ?? '—' }} · {{ v.durationSeconds ? `${v.durationSeconds}s` : '…' }} · {{ formatDate(v.createdAt) }}
+                    </div>
+                    <div v-if="v.status === 'COMPLETED'" class="flex gap-1.5 mt-1">
+                      <UButton size="xs" color="neutral" variant="outline" icon="i-lucide-external-link" label="Watch" :to="`/v/${v.token}`" target="_blank" />
+                      <UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-copy" label="Copy link" @click="copyVideoLink(v.token)" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </UCard>
+          </template>
+
           <template #emails>
+            <UCard v-if="lead.outreachStats.length" class="mb-4">
+              <template #header>
+                <span class="font-medium">Smartlead outreach</span>
+              </template>
+              <div class="divide-y divide-default">
+                <div v-for="st in lead.outreachStats" :key="st.externalCampaignId + st.sequenceNumber" class="py-2.5 flex items-center gap-2 flex-wrap text-sm">
+                  <UBadge color="neutral" variant="outline" size="sm">
+                    step {{ st.sequenceNumber }}
+                  </UBadge>
+                  <span class="font-mono text-xs">{{ st.email }}</span>
+                  <span v-if="st.sentAt" class="text-xs text-muted">sent {{ formatDateTime(st.sentAt) }}</span>
+                  <UBadge v-if="st.openCount" color="warning" variant="subtle" size="sm">
+                    {{ st.openCount }} opens
+                  </UBadge>
+                  <UBadge v-if="st.clickCount" color="warning" variant="subtle" size="sm">
+                    {{ st.clickCount }} clicks
+                  </UBadge>
+                  <UBadge v-if="st.repliedAt" color="success" variant="subtle" size="sm">
+                    replied {{ formatDateTime(st.repliedAt) }}
+                  </UBadge>
+                  <UBadge v-if="st.bounced" color="error" variant="subtle" size="sm">
+                    bounced
+                  </UBadge>
+                </div>
+              </div>
+            </UCard>
             <UCard>
               <div v-if="!lead.emails.length" class="text-sm text-muted py-6 text-center">
-                No emails sent to this lead yet.
+                No emails sent to this lead yet<span v-if="lead.outreachStats.length"> from the old internal sender</span>.
               </div>
               <div v-else class="flex flex-col gap-4">
                 <div v-for="e in lead.emails" :key="e.id" class="border border-default rounded-lg p-3">
@@ -276,9 +538,6 @@ const tabs = [
                       test
                     </UBadge>
                     <span class="text-xs text-muted">{{ formatDateTime(e.sentAt) }}</span>
-                  </div>
-                  <div class="text-xs text-muted mt-1">
-                    Campaign: {{ e.campaignName ?? '—' }}
                   </div>
                   <div class="flex gap-3 mt-2 flex-wrap">
                     <span v-for="ev in e.events" :key="ev.type + ev.occurredAt" class="text-xs text-muted flex items-center gap-1">

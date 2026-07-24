@@ -6,9 +6,8 @@ import { AuthService } from '../services/auth.service'
 // Paths that skip session auth: the auth flow itself, health checks, and the
 // public tracking/webhook/video routes:
 //   /api/v          — public video landing page data, byte stream, events
-//   /api/webhooks   — Resend delivery/open/click/bounce webhooks (signature-verified)
 //   /api/unsubscribe — RFC 8058 one-click unsubscribe
-const PUBLIC_PREFIXES = ['/api/auth', '/api/health', '/api/v', '/api/webhooks', '/api/unsubscribe']
+const PUBLIC_PREFIXES = ['/api/auth', '/api/health', '/api/v', '/api/unsubscribe']
 
 export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
   // UniFi SSO is parked (see plan §9.1) — AUTH_DISABLED=true skips session checks.

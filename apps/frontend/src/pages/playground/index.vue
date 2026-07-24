@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { PlaygroundApi } from '~/app/api/playground.api'
+import { $api } from '~/app/api/client'
 
-// Live email config doubles as an "is the API up + env sane" check.
-const { data: emailConfig, error: emailError } = await useAsyncData('playground.emailConfig', () => PlaygroundApi.emailConfig())
+// "Is the API up" check.
+const { error: apiError } = await useAsyncData('playground.health', () => $api('/api/health'))
 
 // status: live API test results, 2026-07-12 (✅ working · ⚠️ partial · 🚫 blocked)
 const services = [
@@ -10,13 +10,13 @@ const services = [
   { name: 'Google Places', to: '/playground/google-places', icon: 'i-lucide-map', description: 'Verified business data — rating, hours, canonical website.', status: '✅' },
   { name: 'Firecrawl', to: '/playground/firecrawl', icon: 'i-lucide-globe', description: 'Scrape the business\'s own website — staff, services, hours.', status: '✅' },
   { name: 'OpenRouter', to: '/playground/openrouter', icon: 'i-lucide-sparkles', description: 'LLM extraction — scraped markdown → facts, services, staff.', status: '✅' },
-  { name: 'Apollo', to: '/playground/apollo', icon: 'i-lucide-user-search', description: 'Contact enrichment — find a decision-maker\'s work email.', status: '⚠️', statusNote: 'Company enrich works; person match is 403 on the free Apollo plan.' },
+  { name: 'Apollo', to: '/playground/apollo', icon: 'i-lucide-user-search', description: 'Contact enrichment — find a decision-maker\'s work email.', status: '✅', statusNote: 'Company enrich and person match both live (verified work emails).' },
   { name: 'PDL', to: '/playground/pdl', icon: 'i-lucide-contact-round', description: 'Primary contact data — company enrich, people search, person enrich.', status: '✅' },
   { name: 'Hunter', to: '/playground/hunter', icon: 'i-lucide-at-sign', description: 'Cheap email finder — name + domain → email, charged only on match.', status: '✅' },
   { name: 'FullEnrich', to: '/playground/fullenrich', icon: 'i-lucide-layers', description: 'Waterfall aggregator — expensive last resort for contacts.', status: '✅' },
   { name: 'HeyGen', to: '/playground/heygen', icon: 'i-lucide-video', description: 'Avatars, voices, studio templates, video generation.', status: '✅' },
-  { name: 'Email', to: '/playground/email', icon: 'i-lucide-mail', description: 'Send a test email through Resend (test-mode enforced).', status: '✅' },
-  { name: 'Jambonz', to: '/playground/jambonz', icon: 'i-lucide-phone-call', description: 'Telephony — demo phone numbers + PINs from Konci\'s own server.', status: '⚠️', statusNote: 'Pool/agent lists verified. Provision/release endpoints untested — they take a real number from the production pool; test deliberately from the page.' },
+  { name: 'Smartlead', to: '/playground/smartlead', icon: 'i-lucide-send', description: 'Cold email sending — campaigns, lead push, per-lead stats.', status: '⚠️', statusNote: 'Campaigns + email accounts verified live 2026-07-23. Analytics/statistics/lead-push not yet exercised — validate from this page (statistics raw JSON informs the S5 mapping). See .claude/smartlead-integration.md.' },
+  { name: 'Konci platform', to: '/playground/konci', icon: 'i-lucide-rocket', description: 'Internal leads API — registers the lead a test account + claim link.', status: '❓', statusNote: 'Staging (app-staging.konci.ai). Register creates a REAL staging account; pipeline ~80s — poll from the page.' },
 ]
 </script>
 
@@ -35,16 +35,10 @@ const services = [
         </p>
 
         <UAlert
-          v-if="emailError"
+          v-if="apiError"
           color="error" variant="subtle" icon="i-lucide-server-off"
           title="API not reachable"
-          :description="`Is the API running? (pnpm dev:api) — ${emailError.message}`"
-        />
-        <UAlert
-          v-else-if="emailConfig"
-          :color="emailConfig.testMode ? 'warning' : 'error'" variant="subtle" icon="i-lucide-flask-conical"
-          :title="emailConfig.testMode ? `Email test mode is ON — everything goes to ${emailConfig.testRecipient}` : 'Email test mode is OFF — emails go to REAL recipients'"
-          :description="`Sending from: ${emailConfig.from}`"
+          :description="`Is the API running? (pnpm dev:api) — ${apiError.message}`"
         />
 
         <div class="grid sm:grid-cols-2 gap-4">

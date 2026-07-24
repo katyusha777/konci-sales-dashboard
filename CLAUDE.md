@@ -1,7 +1,8 @@
 # Konci Sales Dashboard
 
-Internal sales tool for Konci (AI phone operator for businesses): lead management,
-enrichment, avatar-video demos, drip email campaigns.
+Internal sales tool for Konci (AI phone operator for businesses): lead mining,
+enrichment, avatar-video demos, Konci test-account provisioning, and list sync into
+Smartlead (which owns the actual cold-email sending).
 
 **Read `.claude/PROJECT_PLAN.md` before building features** — it defines the domain model,
 services, scheduler design, build phases, and (importantly) what was deliberately dropped
@@ -9,9 +10,20 @@ from the old prototype. Keep everything minimal and straightforward: no versioni
 audit machinery, no speculative abstraction. When in doubt, fewer tables and fewer layers.
 **Read `.claude/ENRICHMENT.md` before touching enrichment** — providers, flows, costs,
 confidence rules. **Read `.claude/TELEPHONY.md` before touching telephony** — it hits
-Konci's production phone infrastructure. The old repo is fully audited — before mining
+Konci's production phone infrastructure. **Read `.claude/smartlead-integration.md` before
+touching Smartlead / lead lists / outreach-email or video fields** — it holds the
+list-sync design, stats mirror, and the decision that Smartlead replaces internal
+campaign sending. The old repo is fully audited — before mining
 it for anything, check `.claude/OLD_REPO_AUDIT.md` (what's ported / what to mine per
 phase / what to ignore).
+
+## Dev servers — start at the beginning of every conversation
+
+At the start of each conversation, start both dev servers as background tasks (skip any
+already running — check with `lsof -i :8787 -i :3000 -sTCP:LISTEN`):
+
+- `pnpm dev:api` — API on http://localhost:8787
+- `pnpm dev:frontend` — frontend on http://localhost:3000
 
 ## Monorepo
 

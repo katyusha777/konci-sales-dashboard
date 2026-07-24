@@ -35,6 +35,11 @@ const MAP: Record<string, { label: string, color: 'primary' | 'success' | 'error
   COMPLAINED: { label: 'Complained', color: 'error' },
   CANCELLED: { label: 'Cancelled', color: 'neutral' },
   SUPPRESSED: { label: 'Suppressed', color: 'error' },
+  // List member sync status
+  SYNCED: { label: 'Synced', color: 'success' },
+  // Konci registration status
+  PREPARED: { label: 'Prepared', color: 'success' },
+  NEEDS_PHONE: { label: 'Needs phone', color: 'warning' },
   // Contact email status
   UNKNOWN: { label: 'Unknown', color: 'neutral' },
   VALID: { label: 'Valid', color: 'success' },

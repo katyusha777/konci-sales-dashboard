@@ -14,7 +14,7 @@ export abstract class LeadsApi {
     return $api('/api/leads', { method: 'POST', body: fields })
   }
 
-  static update(id: string, fields: Partial<Pick<ILead, 'status' | 'assignedTo' | 'konciCustomerId' | 'demoPhone' | 'demoPin'>>): Promise<ILeadDetail> {
+  static update(id: string, fields: Partial<Pick<ILead, 'status' | 'assignedTo' | 'email' | 'outreachEmail' | 'konciCustomerId' | 'demoPhone' | 'demoPin'>>): Promise<ILeadDetail> {
     return $api(`/api/leads/${id}`, { method: 'PATCH', body: fields })
   }
 
@@ -26,6 +26,11 @@ export abstract class LeadsApi {
 
   static addNote(id: string, body: string): Promise<ILeadNote> {
     return $api(`/api/leads/${id}/notes`, { method: 'POST', body: { body } })
+  }
+
+  // Bulk delete — related rows (contacts, videos, list memberships, …) cascade.
+  static bulkDelete(leadIds: Array<string>): Promise<{ deleted: number }> {
+    return $api('/api/leads/bulk-delete', { method: 'POST', body: { leadIds } })
   }
 
   static industries(): Promise<Array<string>> {
@@ -54,5 +59,27 @@ export abstract class LeadsApi {
 
   static scrapioImport(results: Array<IScrapioResult>): Promise<number> {
     return $api('/api/leads/scrapio/import', { method: 'POST', body: { results } })
+  }
+
+  // AI decision-maker pick (S4b). force re-picks over an existing choice.
+  static pickOutreachEmail(id: string, force = false): Promise<{ picked: boolean, email?: string | null, reason: string | null, lead: ILeadDetail }> {
+    return $api(`/api/leads/${id}/pick-outreach-email`, { method: 'POST', body: { force } })
+  }
+
+  // ── Konci platform registration (test account for the lead) ──
+  static konciRegister(id: string): Promise<ILeadDetail> {
+    return $api(`/api/leads/${id}/konci/register`, { method: 'POST' })
+  }
+
+  static konciRefresh(id: string): Promise<ILeadDetail> {
+    return $api(`/api/leads/${id}/konci/refresh`, { method: 'POST' })
+  }
+
+  static konciRetry(id: string): Promise<ILeadDetail> {
+    return $api(`/api/leads/${id}/konci/retry`, { method: 'POST' })
+  }
+
+  static konciClaimLink(id: string): Promise<ILeadDetail> {
+    return $api(`/api/leads/${id}/konci/claim-link`, { method: 'POST' })
   }
 }

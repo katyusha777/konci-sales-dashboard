@@ -11,11 +11,10 @@ function serializeTemplate(t: Template) {
   return {
     id: t.id,
     name: t.name,
-    subject: t.subject,
-    body: t.body,
     videoScript: t.videoScript,
     videoScenes: t.videoScenes.length > 0 ? t.videoScenes : null,
     avatarId: t.avatarId,
+    voiceId: t.voiceId,
     heygenTemplateId: t.heygenTemplateId,
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
@@ -35,15 +34,39 @@ export default class TemplateController extends Controller {
 
   // POST /api/templates — insert (no id) or update (id present)
   async save(req: AppRequest<{ Body: TemplateSaveInput }>) {
-    const { name, subject, body } = req.body
-    if (!name?.trim() || !subject?.trim() || !body?.trim())
-      return this.fail(400, 'name, subject and body are required')
+    const { name, videoScript, avatarId, heygenTemplateId } = req.body
+    if (!name?.trim())
+      return this.fail(400, 'name is required')
+    const hasAvatarVideo = !!avatarId && !!videoScript?.trim()
+    if (!hasAvatarVideo && !heygenTemplateId)
+      return this.fail(400, 'Template needs a video: an avatar + script, or a HeyGen studio template')
     try {
       const saved = await TemplateService.save(this.prisma, req.body)
       return this.data(serializeTemplate(saved))
     }
     catch {
       return this.fail(404, 'Template not found')
+    }
+  }
+
+  // DELETE /api/templates/:id
+  async destroy(req: AppRequest<{ Params: { id: string } }>) {
+    try {
+      await TemplateService.remove(this.prisma, req.params.id)
+      return this.success('Template deleted')
+    }
+    catch {
+      return this.fail(404, 'Template not found')
+    }
+  }
+
+  // GET /api/templates/voices — HeyGen voices for the editor's voice picker
+  async voices() {
+    try {
+      return this.data(await TemplateService.heygenVoices(this.c.env))
+    }
+    catch (err) {
+      return this.fail(502, 'HeyGen voice list failed', (err as Error).message)
     }
   }
 

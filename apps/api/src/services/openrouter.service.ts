@@ -24,6 +24,22 @@ export interface DiscoveredContact {
   email: string | null
 }
 
+export interface OutreachEmailCandidate {
+  email: string
+  contactId: string | null // null = the lead's own inbox
+  name: string | null
+  jobTitle: string | null
+  emailStatus: string | null
+  source: string | null
+}
+
+export interface OutreachEmailPick {
+  email: string | null
+  contactId: string | null
+  reason: string | null
+  raw: unknown
+}
+
 export interface ExtractSignalsResult {
   contentIsRelevant: boolean
   contentRelevanceReason: string | null
@@ -341,6 +357,40 @@ The goal is maximum likelihood of a correct match.`,
       canonicalDomain: typeof parsed.canonicalDomain === 'string' ? parsed.canonicalDomain : null,
       discoveredContacts,
       raw: parsed,
+    }
+  }
+
+  /**
+   * Pick the best outreach email — the key decision maker for buying an AI phone
+   * operator (owner > GM/manager > named person > generic inbox). Chooses ONLY from
+   * the provided candidates; returns email null when none is worth sending to.
+   */
+  static async pickOutreachEmail(env: Env, input: { businessName: string, industry?: string | null, candidates: Array<OutreachEmailCandidate> }): Promise<OutreachEmailPick> {
+    const prompt = `You choose the single best email address for cold outreach selling Konci, an AI phone operator for small businesses (it answers their calls, books appointments).
+
+Business: ${input.businessName}${input.industry ? ` (${input.industry})` : ''}
+
+Candidate emails (JSON):
+${JSON.stringify(input.candidates, null, 2)}
+
+Rules:
+- Pick the KEY DECISION MAKER: owner/founder > general manager > office/practice manager > any named person > generic inbox (info@, contact@).
+- Prefer emails whose status is not BOUNCED/UNSUBSCRIBED/COMPLAINED (never pick those).
+- A named person at the business beats a generic inbox; a generic inbox beats nothing.
+- If NO candidate is usable, return email null.
+
+Respond with JSON only:
+{ "email": "string or null", "contactId": "string or null (the candidate's contactId, null for the lead-level inbox)", "reason": "one short sentence" }`
+
+    const { content, raw } = await this.chat(env, MODELS.FLASH, [{ role: 'user', content: prompt }], 0)
+    const parsed = JSON.parse(content) as { email?: string | null, contactId?: string | null, reason?: string | null }
+    // Trust nothing: the pick must be one of the candidates, verbatim.
+    const match = input.candidates.find(c => c.email === parsed.email)
+    return {
+      email: match?.email ?? null,
+      contactId: match?.contactId ?? null,
+      reason: parsed.reason ?? null,
+      raw,
     }
   }
 }

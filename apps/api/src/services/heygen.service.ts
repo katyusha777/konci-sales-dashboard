@@ -38,6 +38,7 @@ export interface HeygenTemplateVariable {
 export interface HeygenVideoStatus {
   status: 'pending' | 'waiting' | 'processing' | 'completed' | 'failed'
   videoUrl: string | null
+  thumbnailUrl: string | null
   duration: number | null
   error: string | null
 }
@@ -229,6 +230,7 @@ export abstract class HeygenService {
       data: {
         status: HeygenVideoStatus['status']
         video_url?: string
+        thumbnail_url?: string
         duration?: number
         error?: string | { code?: string, message?: string, detail?: string }
       }
@@ -237,6 +239,7 @@ export abstract class HeygenService {
     return {
       status: response.data.status,
       videoUrl: response.data.video_url ?? null,
+      thumbnailUrl: response.data.thumbnail_url ?? null,
       duration: response.data.duration ?? null,
       error: err ? (typeof err === 'string' ? err : err.message ?? err.detail ?? err.code ?? 'unknown error') : null,
     }

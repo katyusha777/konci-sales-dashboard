@@ -3,6 +3,7 @@ import type { TableColumn } from '@nuxt/ui'
 import type { IImportReport, ILead, ILeadCreate, IScrapioResult, IScrapioSearchParams, TEnrichmentStatus, TLeadStatus } from '~/app/types'
 import { ApiError } from '~/app/api/client'
 import { LeadsApi } from '~/app/api/leads.api'
+import { ListsApi } from '~/app/api/lists.api'
 
 const toast = useToast()
 
@@ -87,9 +88,86 @@ const selectedLeads = computed(() =>
 )
 watch(data, () => rowSelection.value = {})
 
-function bulkAddToCampaign() {
-  toast.add({ title: `${selectedLeads.value.length} leads would be added to a campaign`, description: 'Campaign picker comes with the campaign pages.', color: 'info' })
+// Bulk add to list — existing list or a new one created inline
+const listModalOpen = ref(false)
+const listChoice = ref<string | undefined>() // list id, or NEW_LIST
+const newListName = ref('')
+const addingToList = ref(false)
+const NEW_LIST = '__new__'
+
+const { data: allLists, refresh: refreshLists } = await useAsyncData('lists.picker', () => ListsApi.list())
+const listOptions = computed(() => [
+  ...(allLists.value ?? []).map(l => ({ label: `${l.name} (${l.memberCount})`, value: l.id })),
+  { label: '+ New list…', value: NEW_LIST },
+])
+
+watch(listModalOpen, (open) => {
+  if (open) {
+    listChoice.value = undefined
+    newListName.value = ''
+    refreshLists()
+  }
+})
+
+async function bulkAddToList() {
+  const leads = [...selectedLeads.value]
+  addingToList.value = true
+  try {
+    let listId = listChoice.value
+    if (listId === NEW_LIST) {
+      const created = await ListsApi.create({ name: newListName.value.trim() })
+      listId = created.id
+    }
+    const result = await ListsApi.addLeads(listId!, leads.map(l => l.id))
+    listModalOpen.value = false
+    rowSelection.value = {}
+    toast.add({
+      title: `${result.added} leads added to the list`,
+      description: result.duplicates ? `${result.duplicates} were already in it.` : undefined,
+      color: 'success',
+    })
+  }
+  catch (err) {
+    toast.add({ title: 'Could not add to list', description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    addingToList.value = false
+  }
+}
+
+// Bulk AI outreach-email pick: skips leads that already have one; 2 at a time.
+const bulkPicking = ref(false)
+async function bulkPickEmails() {
+  const leads = [...selectedLeads.value]
   rowSelection.value = {}
+  bulkPicking.value = true
+  let picked = 0
+  let skipped = 0
+  let failed = 0
+  const queue = [...leads]
+  const worker = async () => {
+    for (let lead = queue.shift(); lead; lead = queue.shift()) {
+      try {
+        const result = await LeadsApi.pickOutreachEmail(lead.id, false)
+        result.picked ? picked++ : skipped++
+      }
+      catch {
+        failed++
+      }
+    }
+  }
+  try {
+    await Promise.all([worker(), worker()])
+  }
+  finally {
+    bulkPicking.value = false
+  }
+  await refresh()
+  toast.add({
+    title: `Outreach emails: ${picked} picked`,
+    description: [skipped && `${skipped} skipped (already set / no candidates)`, failed && `${failed} failed`].filter(Boolean).join(' · ') || undefined,
+    color: failed ? 'warning' : 'success',
+  })
 }
 
 // Bulk enrich: 2 leads at a time (each request runs the full waterfall, 30s–3min)
@@ -128,6 +206,28 @@ async function bulkEnrich() {
     description: [skipped && `${skipped} skipped (fresh/attempt guard)`, failed && `${failed} failed`].filter(Boolean).join(' · ') || undefined,
     color: failed ? 'warning' : 'success',
   })
+}
+
+// --- Bulk delete -----------------------------------------------------------------
+const deleteLeadsOpen = ref(false)
+const deletingLeads = ref(false)
+
+async function bulkDelete() {
+  const leads = [...selectedLeads.value]
+  deletingLeads.value = true
+  try {
+    const { deleted } = await LeadsApi.bulkDelete(leads.map(l => l.id))
+    deleteLeadsOpen.value = false
+    rowSelection.value = {}
+    await refresh()
+    toast.add({ title: `${deleted} leads deleted`, color: 'success' })
+  }
+  catch (err) {
+    toast.add({ title: 'Could not delete leads', description: (err as ApiError).message, color: 'error' })
+  }
+  finally {
+    deletingLeads.value = false
+  }
 }
 
 // --- Add lead (manual input) ---------------------------------------------------
@@ -315,8 +415,10 @@ async function importPicked() {
         <!-- Bulk action bar -->
         <UAlert v-if="selectedLeads.length || bulkEnriching" color="primary" variant="subtle" :title="bulkEnriching ? 'Enriching… each lead runs the full waterfall (30s–3min)' : `${selectedLeads.length} selected`">
           <template #actions>
-            <UButton size="xs" icon="i-lucide-send" label="Add to campaign" :disabled="bulkEnriching" @click="bulkAddToCampaign" />
-            <UButton size="xs" icon="i-lucide-sparkles" color="neutral" variant="outline" label="Enrich" :loading="bulkEnriching" @click="bulkEnrich" />
+            <UButton size="xs" icon="i-lucide-list-checks" label="Add to list" :disabled="bulkEnriching || bulkPicking" @click="listModalOpen = true" />
+            <UButton size="xs" icon="i-lucide-at-sign" color="neutral" variant="outline" label="Pick emails (AI)" :loading="bulkPicking" :disabled="bulkEnriching" @click="bulkPickEmails" />
+            <UButton size="xs" icon="i-lucide-sparkles" color="neutral" variant="outline" label="Enrich" :loading="bulkEnriching" :disabled="bulkPicking" @click="bulkEnrich" />
+            <UButton size="xs" icon="i-lucide-trash-2" color="error" variant="outline" label="Delete" :disabled="bulkEnriching || bulkPicking" @click="deleteLeadsOpen = true" />
           </template>
         </UAlert>
 
@@ -368,6 +470,42 @@ async function importPicked() {
           <UPagination v-model:page="filters.page" :total="data?.total ?? 0" :items-per-page="filters.perPage" />
         </div>
       </div>
+
+      <!-- Add selected leads to a list -->
+      <UModal v-model:open="listModalOpen" :title="`Add ${selectedLeads.length} leads to a list`" description="Lists get linked to a Smartlead campaign and synced.">
+        <template #body>
+          <div class="flex flex-col gap-3">
+            <UFormField label="List">
+              <USelectMenu v-model="listChoice" :items="listOptions" value-key="value" placeholder="Pick a list…" class="w-full" />
+            </UFormField>
+            <UFormField v-if="listChoice === NEW_LIST" label="New list name" required>
+              <UInput v-model="newListName" placeholder="Barbershops — Texas, July" class="w-full" />
+            </UFormField>
+          </div>
+        </template>
+        <template #footer>
+          <UButton
+            label="Add to list" :loading="addingToList"
+            :disabled="!listChoice || (listChoice === NEW_LIST && !newListName.trim())"
+            @click="bulkAddToList"
+          />
+        </template>
+      </UModal>
+
+      <!-- Bulk delete confirm -->
+      <UModal v-model:open="deleteLeadsOpen" :title="`Delete ${selectedLeads.length} leads?`" description="Everything on them goes too — contacts, videos, costs, notes, list memberships. This cannot be undone.">
+        <template #body>
+          <div class="border border-default rounded-lg divide-y divide-default max-h-64 overflow-y-auto text-sm">
+            <div v-for="l in selectedLeads" :key="l.id" class="px-3 py-1.5 truncate">
+              {{ l.name }} <span class="text-xs text-muted">{{ l.domain ?? '' }}</span>
+            </div>
+          </div>
+        </template>
+        <template #footer>
+          <UButton color="neutral" variant="ghost" label="Cancel" @click="deleteLeadsOpen = false" />
+          <UButton color="error" :label="`Delete ${selectedLeads.length} leads`" :loading="deletingLeads" @click="bulkDelete" />
+        </template>
+      </UModal>
 
       <!-- Add lead (manual input) -->
       <UModal v-model:open="addModalOpen" title="Add lead" description="Enter the business — enrichment fills in the rest.">

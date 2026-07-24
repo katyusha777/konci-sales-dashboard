@@ -6,8 +6,10 @@
 
 import type { VideoEventType } from '../generated/prisma/client'
 import type { createPrisma } from '../lib/prisma'
+import { r2PublicUrl } from '../lib/r2'
 import { buildLeadVars, renderTemplate } from '../lib/template-render'
 import { HeygenService } from './heygen.service'
+import { LeadListService } from './lead-list.service'
 
 type PrismaClient = ReturnType<typeof createPrisma>
 
@@ -19,7 +21,6 @@ const RENDER_TIMEOUT_MS = 60 * 60 * 1000
 export interface VideoGenerateInput {
   leadId: string
   templateId: string
-  campaignLeadId?: string
 }
 
 const VIDEO_EVENT_TYPES = new Set<VideoEventType>([
@@ -67,12 +68,14 @@ export abstract class VideoService {
       const avatar = await prisma.avatar.findUnique({ where: { id: template.avatarId } })
       if (!avatar)
         throw new Error('Template references a missing avatar')
-      if (!avatar.voiceId)
-        throw new Error('Avatar has no voice configured — set one before generating video')
+      // Template voice override wins; the avatar's configured voice is the fallback.
+      const voiceId = template.voiceId ?? avatar.voiceId
+      if (!voiceId)
+        throw new Error('No voice: pick one on the template or configure the avatar\'s voice')
       avatarId = avatar.id
       heygenVideoId = await HeygenService.generateVideo(env, {
         avatarId: avatar.heygenAvatarId,
-        voiceId: avatar.voiceId,
+        voiceId,
         script: renderTemplate(template.videoScript, vars),
       })
     }
@@ -83,7 +86,6 @@ export abstract class VideoService {
     return prisma.video.create({
       data: {
         leadId: input.leadId,
-        campaignLeadId: input.campaignLeadId ?? null,
         templateId: template.id,
         avatarId,
         heygenVideoId,
@@ -92,6 +94,23 @@ export abstract class VideoService {
         costUsd: test ? 0 : HEYGEN_VIDEO_COST,
       },
     })
+  }
+
+  /** All renders, newest first, with the lead + template they belong to (the /videos page). */
+  static async list(prisma: PrismaClient, page: number, perPage: number) {
+    const [total, items] = await Promise.all([
+      prisma.video.count(),
+      prisma.video.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * perPage,
+        take: perPage,
+        include: {
+          lead: { select: { id: true, name: true, videoUrl: true } },
+          template: { select: { name: true } },
+        },
+      }),
+    ])
+    return { items, total, page, perPage }
   }
 
   /** Cron tick: advance every PROCESSING video (download completed → R2, mark COMPLETED/FAILED). */
@@ -110,10 +129,47 @@ export abstract class VideoService {
           const bytes = await res.arrayBuffer()
           const r2Key = `videos/${video.id}.mp4`
           await env.VIDEOS.put(r2Key, bytes, { httpMetadata: { contentType: 'video/mp4' } })
+
+          // HeyGen's thumbnail URL expires (~7 days) — copy it into R2 so the email
+          // image at /api/v/:token/thumb never breaks. A thumb failure isn't fatal.
+          let thumbnailR2Key: string | null = null
+          if (status.thumbnailUrl) {
+            try {
+              const thumbRes = await fetch(status.thumbnailUrl)
+              if (thumbRes.ok) {
+                // HeyGen's CDN often says binary/octet-stream — email clients want image/*.
+                const contentType = thumbRes.headers.get('content-type')
+                thumbnailR2Key = `videos/${video.id}.jpg`
+                await env.VIDEOS.put(thumbnailR2Key, await thumbRes.arrayBuffer(), {
+                  httpMetadata: { contentType: contentType?.startsWith('image/') ? contentType : 'image/jpeg' },
+                })
+              }
+            }
+            catch (err) {
+              console.error(`[video-poll] ${video.id} thumbnail:`, (err as Error).message)
+            }
+          }
+
           await prisma.video.update({
             where: { id: video.id },
-            data: { status: 'COMPLETED', r2Key, durationSeconds: status.duration ? Math.round(status.duration) : null },
+            data: { status: 'COMPLETED', r2Key, thumbnailR2Key, durationSeconds: status.duration ? Math.round(status.duration) : null },
           })
+
+          // Newest completed video becomes the lead's outreach video — these two fields
+          // are what the Smartlead sync pushes as video_url / video_thumbnail.
+          await prisma.lead.update({
+            where: { id: video.leadId },
+            data: {
+              videoUrl: `${env.APP_URL}/v/${video.token}`,
+              // Prefer the R2 CDN URL (works everywhere, incl. emails); Worker route is the fallback.
+              videoThumbnailUrl: r2PublicUrl(env, thumbnailR2Key)
+                ?? (thumbnailR2Key ? `${env.APP_URL}/api/v/${video.token}/thumb` : null),
+            },
+          })
+          // Already pushed to Smartlead? Refresh its custom fields so the email
+          // template's {{#if video_url}} block lights up.
+          await LeadListService.pushVideoFieldsUpdate(prisma, env, video.leadId)
+            .catch(err => console.error(`[video-poll] ${video.id} smartlead update:`, (err as Error).message))
           // Record cost for a real (non-test) render only
           const cost = Number(video.costUsd ?? 0)
           if (cost > 0) {
@@ -145,10 +201,10 @@ export abstract class VideoService {
   }
 
   /** Public landing-page data for /v/:token. */
-  static async pageData(prisma: PrismaClient, token: string) {
+  static async pageData(prisma: PrismaClient, env: Env, token: string) {
     const video = await prisma.video.findUnique({
       where: { token },
-      include: { lead: { select: { name: true, demoPhone: true, demoPin: true } } },
+      include: { lead: { select: { name: true, demoPhone: true, demoPin: true, konciRegistration: { select: { claimUrl: true } } } } },
     })
     if (!video)
       return null
@@ -157,7 +213,11 @@ export abstract class VideoService {
       businessName: video.lead.name,
       demoPhone: video.lead.demoPhone,
       demoPin: video.lead.demoPin,
+      // "Get this for your business" CTA — the lead's claim link when one exists
+      claimUrl: video.lead.konciRegistration?.claimUrl ?? null,
       ready: video.status === 'COMPLETED' && !!video.r2Key,
+      // Direct CDN URL when the bucket is public; the player falls back to /stream.
+      videoSrc: video.status === 'COMPLETED' ? r2PublicUrl(env, video.r2Key) : null,
       durationSeconds: video.durationSeconds,
     }
   }
@@ -178,6 +238,24 @@ export abstract class VideoService {
       },
     })
     return true
+  }
+
+  /** The email-embed thumbnail (public, long-cacheable — the URL is per-video). */
+  static async thumbnail(prisma: PrismaClient, env: Env, token: string): Promise<Response> {
+    const video = await prisma.video.findUnique({ where: { token }, select: { thumbnailR2Key: true } })
+    if (!video?.thumbnailR2Key)
+      return new Response('Not found', { status: 404 })
+    const object = await env.VIDEOS.get(video.thumbnailR2Key)
+    if (!object)
+      return new Response('Not found', { status: 404 })
+    const stored = object.httpMetadata?.contentType
+    return new Response(object.body as ReadableStream, {
+      headers: {
+        'Content-Type': stored?.startsWith('image/') ? stored : 'image/jpeg',
+        'Content-Length': String(object.size),
+        'Cache-Control': 'public, max-age=86400',
+      },
+    })
   }
 
   /** Stream the R2-stored bytes with HTTP Range support (206) so the browser can scrub. */

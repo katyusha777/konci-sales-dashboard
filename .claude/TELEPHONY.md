@@ -1,5 +1,9 @@
 # Telephony (Jambonz)
 
+> **REMOVED FROM THE APP 2026-07-24** — the Jambonz service + playground were deleted
+> (demo lines come from the Konci platform registration pipeline instead). This doc is
+> kept as background reference on how the phone infrastructure works.
+
 > How a hot lead gets a **demo phone number + PIN** so they can call and hear *their own*
 > AI receptionist. Ported from the old repo's `packages/telephony` — much smaller than
 > enrichment, but it touches Konci's real production phone infrastructure, so read the

@@ -8,7 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "deploy": "nuxt build && wrangler pages deploy dist --project-name=konci-frontend"
+    "deploy": "API_PROXY_URL=https://konci-api.patrickdeamorim.workers.dev nuxt build && wrangler pages deploy dist --project-name=konci-frontend"
   },
   "dependencies": {
     "@nuxt/ui": "^4.9.0",
