@@ -10,6 +10,7 @@ const params = reactive<IScrapioLiveParams>({
   minReviews: undefined,
   requireWebsite: false,
   requirePhone: false,
+  requireEmail: false,
   excludeClosed: true,
   perPage: 10,
 })
@@ -55,9 +56,9 @@ async function search(cursor?: string) {
 
     <template #body>
       <UAlert
-        color="error" variant="subtle" icon="i-lucide-octagon-x" class="mb-6"
-        title="🚫 Not working (live test 2026-07-12) — API access not included in the current Scrap.io plan"
-        description="Every call returns 403: “You don't have the permission to make API call. Please upgrade your subscription.” The key itself is valid. Fix: upgrade the plan at app.scrap.io → Account → Subscription to a tier that includes API access, then retest here — no code change needed."
+        color="success" variant="subtle" icon="i-lucide-circle-check" class="mb-6"
+        title="✅ Working (live test 2026-07-26) — Agency plan ($199/mo)"
+        description="Search by city / admin1 / admin2 (whole-country search NOT included), up to 50 types per search, 40k export credits/mo. Booleans must be sent as 1/0. State must be a CODE (TX) — full names return 0 results (the service normalizes them)."
       />
       <div class="grid lg:grid-cols-[18rem_1fr] gap-6">
         <!-- Form -->
@@ -79,6 +80,7 @@ async function search(cursor?: string) {
           </div>
           <UCheckbox v-model="params.requireWebsite" label="Has website" />
           <UCheckbox v-model="params.requirePhone" label="Has phone" />
+          <UCheckbox v-model="params.requireEmail" label="Has email on website" />
           <UCheckbox v-model="params.excludeClosed" label="Exclude permanently closed" />
           <UFormField label="Results per page">
             <USelect v-model="params.perPage" :items="[1, 10, 25, 50]" class="w-full" />

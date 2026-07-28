@@ -105,6 +105,11 @@ export abstract class LeadListService {
     return prisma.leadList.delete({ where: { id } }) // members cascade
   }
 
+  // Admin nuke: every list; members cascade, leads themselves stay.
+  static async removeAll(prisma: PrismaClient): Promise<number> {
+    return (await prisma.leadList.deleteMany({})).count
+  }
+
   // Add leads to a list; duplicates are skipped silently (unique [listId, leadId]).
   static async addLeads(prisma: PrismaClient, listId: string, leadIds: Array<string>) {
     const result = await prisma.leadListMember.createMany({
@@ -299,6 +304,7 @@ export abstract class LeadListService {
         video_url: lead.videoUrl ?? '',
         video_thumbnail: lead.videoThumbnailUrl ?? '',
         demo_phone: formatPhoneNational(lead.demoPhone), // "(949) 216-4643" — reads better in emails
+        demo_phone_e164: lead.demoPhone ?? '', // raw "+1…" for tel: links (dialable, PIN appendable)
         demo_pin: lead.demoPin ?? '',
         claim_url: registration.claimUrl ?? '',
       },
@@ -321,17 +327,16 @@ export abstract class LeadListService {
     for (const list of lists) {
       if (list.statsPulledAt && Date.now() - list.statsPulledAt.getTime() < minIntervalMs)
         continue
-      // Their filter is date-granular — overlap one day so nothing falls in the crack.
-      const eventTimeGt = list.statsPulledAt
-        ? new Date(list.statsPulledAt.getTime() - 86_400_000).toISOString().slice(0, 10)
-        : undefined
-
       try {
         let offset = 0
         const limit = 100
-        // Page through; hard cap per tick keeps a huge campaign from eating the Worker.
+        // Full pull each time (their event-time filter is rejected; see
+        // SmartleadService.getCampaignStatistics). Hard cap per tick keeps a huge
+        // campaign from eating the Worker.
+        // ponytail: campaigns >2000 stat rows only mirror the first 2000 per tick —
+        // add real pagination-cursor state if lists ever get that big.
         while (offset < 2000) {
-          const page = await SmartleadService.getCampaignStatistics(env, list.externalCampaignId!, { offset, limit, eventTimeGt })
+          const page = await SmartleadService.getCampaignStatistics(env, list.externalCampaignId!, { offset, limit })
           for (const stat of page.stats) {
             if (await this.upsertStat(prisma, list.externalCampaignId!, stat))
               statsUpserted++
@@ -354,10 +359,27 @@ export abstract class LeadListService {
     if (!stat.leadEmail || stat.sequenceNumber === null)
       return false
     const email = stat.leadEmail.toLowerCase()
-    const lead = await prisma.lead.findFirst({
-      where: { OR: [{ outreachEmail: email }, { email }, { contacts: { some: { email } } }] },
+    // Insensitive: contact/outreach emails aren't lowercased on every write path.
+    const emailMatch = { equals: email, mode: 'insensitive' as const }
+    let lead = await prisma.lead.findFirst({
+      where: { OR: [{ outreachEmail: emailMatch }, { email: emailMatch }, { contacts: { some: { email: emailMatch } } }] },
       select: { id: true, status: true, lastContactedAt: true, lastEngagedAt: true },
     })
+    // EMAIL_TEST_MODE pushes leads as "<companyname>@katyusha.app" — no lead field
+    // carries that address, so match the name-slug back to the lead.
+    if (!lead && email.endsWith('@katyusha.app')) {
+      const slug = email.split('@')[0]!
+      const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM leads
+        WHERE lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) = ${slug}
+        LIMIT 1`
+      if (rows[0]) {
+        lead = await prisma.lead.findUnique({
+          where: { id: rows[0].id },
+          select: { id: true, status: true, lastContactedAt: true, lastEngagedAt: true },
+        })
+      }
+    }
 
     const parse = (v: string | null) => v ? new Date(v) : null
     const sentAt = parse(stat.sentTime)
@@ -410,7 +432,7 @@ export abstract class LeadListService {
         })
       }
       if (stat.isBounced)
-        await prisma.contact.updateMany({ where: { leadId: lead.id, email }, data: { emailStatus: 'BOUNCED' } })
+        await prisma.contact.updateMany({ where: { leadId: lead.id, email: { equals: email, mode: 'insensitive' } }, data: { emailStatus: 'BOUNCED' } })
     }
     return true
   }

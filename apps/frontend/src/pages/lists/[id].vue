@@ -81,7 +81,7 @@ async function runSyncNow() {
     await Promise.all([refreshList(), refreshMembers()])
     toast.add({
       title: 'Scheduler ran',
-      description: `${summary.konciRegistered} Konci registered · ${summary.konciPrepared} prepared · ${summary.leadsSynced} pushed · ${summary.leadsWaiting} waiting`,
+      description: `${summary.leadsEnriched} enriched · ${summary.konciRegistered} Konci registered · ${summary.konciPrepared} prepared · ${summary.leadsSynced} pushed · ${summary.leadsWaiting} waiting`,
       color: 'success',
     })
   }
@@ -169,9 +169,12 @@ watch(addLeadsOpen, (open) => {
     addStep.value = 'pick'
     pickedLeads.value = new Map()
     Object.assign(leadSearch, { search: '', industry: undefined, minScore: undefined })
+    // The assign above may schedule a debounced search — cancel it, we fetch now.
+    clearTimeout(searchTimer)
     searchLeads()
   }
 })
+onBeforeUnmount(() => clearTimeout(searchTimer))
 
 function togglePickedLead(lead: ILead) {
   const next = new Map(pickedLeads.value)

@@ -12,6 +12,7 @@
 
 import type { Contact, EnrichmentProvider, Prisma } from '../generated/prisma/client'
 import type { createPrisma } from '../lib/prisma'
+import { testModeEmail } from '../lib/format'
 import type { FullenrichContactResult } from './fullenrich.service'
 import { getHostname, isBookingPlatform, isSharedDomain, shouldSkipScrape } from '../lib/website'
 import { FirecrawlService } from './firecrawl.service'
@@ -715,11 +716,14 @@ export abstract class EnrichmentService {
       }).catch(() => {})
       if (!pick.email)
         return { picked: false, reason: pick.reason ?? 'AI found no usable candidate' }
+      // EMAIL_TEST_MODE paranoia (plan §6): store the @katyusha.app catch-all as the
+      // outreach address, not the real pick. The AI's choice/reason is still recorded.
+      const outreachEmail = env.EMAIL_TEST_MODE === 'true' ? testModeEmail(lead.name) : pick.email
       await prisma.lead.update({
         where: { id: leadId },
-        data: { outreachEmail: pick.email, outreachContactId: pick.contactId, outreachEmailReason: pick.reason },
+        data: { outreachEmail, outreachContactId: pick.contactId, outreachEmailReason: pick.reason },
       })
-      return { picked: true, email: pick.email, reason: pick.reason }
+      return { picked: true, email: outreachEmail, reason: pick.reason }
     }
     catch (err) {
       await prisma.enrichmentResponse.create({
@@ -773,6 +777,39 @@ export abstract class EnrichmentService {
         status: lead.status === 'NEW' && status === 'COMPLETED' ? 'ENRICHED' : lead.status,
       },
     })
+  }
+
+  /**
+   * Cron tick — auto-enrich freshly mined leads: every lead lands as PENDING (schema
+   * default), the tick works through them oldest-first. A run that fails goes to
+   * FAILED and is NOT retried automatically (never burn credits in a loop) — the
+   * owner retries from the lead page. Small batch: one run is many provider calls.
+   */
+  static async runEnrichTick(prisma: PrismaClient, env: Env, limit = 3): Promise<{ enriched: number }> {
+    const leads = await prisma.lead.findMany({
+      where: { enrichmentStatus: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+      take: limit,
+    })
+    let enriched = 0
+    for (const l of leads) {
+      // Claim atomically — cron, manual "Run scheduler", and the dev self-tick can
+      // overlap, and a double enrichment double-spends credits.
+      const claimed = await prisma.lead.updateMany({ where: { id: l.id, enrichmentStatus: 'PENDING' }, data: { enrichmentStatus: 'IN_PROGRESS' } })
+      if (claimed.count === 0)
+        continue
+      try {
+        await this.enrich(prisma, env, l.id)
+        enriched++
+      }
+      catch (err) {
+        console.error(`[enrich-tick] ${l.id}:`, (err as Error).message)
+        // enrich() only throws before any credits are spent — release the claim.
+        await prisma.lead.updateMany({ where: { id: l.id, enrichmentStatus: 'IN_PROGRESS' }, data: { enrichmentStatus: 'FAILED', enrichmentError: (err as Error).message } })
+      }
+    }
+    return { enriched }
   }
 }
 

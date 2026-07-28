@@ -111,6 +111,16 @@ async function saveOutreachEmail() {
 }
 
 // ── Konci platform registration (test account + claim link) ──
+// While the pipeline runs (~80s) re-fetch the lead every 15s so the status flips to
+// PREPARED without clicking. The refresh traffic also drives the API's dev self-tick.
+onMounted(() => {
+  const timer = setInterval(() => {
+    if (lead.value?.konciRegistration?.status === 'PENDING')
+      refresh()
+  }, 15_000)
+  onUnmounted(() => clearInterval(timer))
+})
+
 const konciBusy = ref(false)
 async function konciAction(fn: () => Promise<unknown>, successTitle: string) {
   konciBusy.value = true

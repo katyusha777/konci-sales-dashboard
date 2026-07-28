@@ -381,25 +381,37 @@ export default class LeadController extends Controller {
     return this.data(await LeadService.importRows(this.prisma, rows, mapping))
   }
 
-  // POST /api/leads/scrapio/search — provider errors surface verbatim (403 until
-  // the Scrap.io subscription has API access)
-  async scrapioSearch(req: AppRequest<{ Body: { keyword?: string, location?: string, category?: string, excludeClosed?: boolean, hasWebsite?: boolean, hasPhone?: boolean, minRating?: number | null, minReviews?: number | null } }>) {
+  // POST /api/leads/scrapio/search — provider errors surface verbatim
+  async scrapioSearch(req: AppRequest<{ Body: { types?: Array<string>, location?: string, excludeClosed?: boolean, hasWebsite?: boolean, hasPhone?: boolean, hasEmail?: boolean, minRating?: number | null, minReviews?: number | null, cursor?: string | null } }>) {
     const b = req.body
+    if (!b.types?.length)
+      return this.fail(400, 'Pick at least one business type')
     try {
-      const { results } = await ScrapioService.search(this.c.env, {
-        type: b.category?.trim() || b.keyword?.trim() || undefined,
+      return this.data(await ScrapioService.search(this.c.env, {
+        types: b.types,
         location: b.location,
         minRating: b.minRating ?? undefined,
         minReviews: b.minReviews ?? undefined,
         requireWebsite: b.hasWebsite,
         requirePhone: b.hasPhone,
+        requireEmail: b.hasEmail,
         excludeClosed: b.excludeClosed,
-        perPage: 20,
-      })
-      return this.data(results)
+        cursor: b.cursor ?? undefined,
+        perPage: 50,
+      }))
     }
     catch (err) {
       return this.fail(502, 'Scrap.io search failed', (err as Error).message)
+    }
+  }
+
+  // GET /api/leads/scrapio/types — static Google Maps category list (~4k entries)
+  async scrapioTypes() {
+    try {
+      return this.data(await ScrapioService.listTypes(this.c.env))
+    }
+    catch (err) {
+      return this.fail(502, 'Scrap.io types failed', (err as Error).message)
     }
   }
 
@@ -407,6 +419,6 @@ export default class LeadController extends Controller {
   async scrapioImport(req: AppRequest<{ Body: { results?: Array<ScrapioResult> } }>) {
     if (!req.body.results?.length)
       return this.fail(400, 'results array is required')
-    return this.data(await LeadService.importScrapioResults(this.prisma, req.body.results))
+    return this.data(await LeadService.importScrapioResults(this.prisma, this.c.env, req.body.results))
   }
 }

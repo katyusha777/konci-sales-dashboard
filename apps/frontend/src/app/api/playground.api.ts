@@ -185,7 +185,7 @@ export abstract class PlaygroundApi {
     return $api(`/api/playground/smartlead/campaigns/${id}/analytics`)
   }
 
-  static smartleadStatistics(id: number, opts?: { offset?: number, limit?: number, eventTimeGt?: string }): Promise<ISmartleadLiveStatistics> {
+  static smartleadStatistics(id: number, opts?: { offset?: number, limit?: number }): Promise<ISmartleadLiveStatistics> {
     return $api(`/api/playground/smartlead/campaigns/${id}/statistics`, { query: opts })
   }
 

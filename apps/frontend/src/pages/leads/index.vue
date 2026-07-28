@@ -255,6 +255,28 @@ async function addLead() {
 }
 
 // --- Import CSV (upload → map columns → report) ---------------------------------
+// Template with every mappable column (labels match CSV_IMPORT_FIELDS) + one example row
+function downloadCsvTemplate() {
+  const example: Record<string, string> = {
+    'Business name': 'Joe\'s Barbershop',
+    'Website': 'https://joesbarber.com',
+    'Phone': '+1 512 555 0100',
+    'Email': 'info@joesbarber.com',
+    'City': 'Austin',
+    'State': 'TX',
+    'Industry': 'Barber shop',
+  }
+  const csv = [CSV_IMPORT_FIELDS.map(f => f.label), CSV_IMPORT_FIELDS.map(f => example[f.label] ?? '')]
+    .map(row => row.map(v => /[",\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v).join(','))
+    .join('\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'leads-template.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 type ImportStep = 'upload' | 'mapping' | 'report'
 const importModalOpen = ref(false)
 const importStep = ref<ImportStep>('upload')
@@ -321,27 +343,43 @@ async function runImport() {
 // --- Find businesses (Scrap.io) ----------------------------------------------
 const findModalOpen = ref(false)
 const searchParams = reactive<IScrapioSearchParams>({
-  keyword: '',
+  types: [],
   location: '',
-  category: '',
   excludeClosed: true,
   hasWebsite: false,
   hasPhone: false,
+  hasEmail: true, // phase 1 is plain-email outreach — default to leads we can actually email
   minRating: null,
   minReviews: null,
 })
+
+// Static ~4k Google Maps category list — fetched once, the first time the modal opens
+const { data: scrapioTypes, execute: loadScrapioTypes } = useAsyncData(
+  'scrapio.types',
+  () => LeadsApi.scrapioTypes(),
+  { immediate: false },
+)
+watch(findModalOpen, open => open && !scrapioTypes.value && loadScrapioTypes())
+const typeOptions = computed(() => (scrapioTypes.value ?? []).map(t => ({ label: t.text, value: t.id })))
+
 const searchResults = ref<Array<IScrapioResult> | null>(null)
+const searchTotal = ref<number | null>(null)
+const searchCursor = ref<string | null>(null)
 const searching = ref(false)
 const importingPicked = ref(false)
 const pickedIds = ref<Set<string>>(new Set())
 
-async function runSearch() {
+async function runSearch(more = false) {
   searching.value = true
   try {
-    const results = await LeadsApi.scrapioSearch(searchParams)
-    // Defensive: only ever render a real array of results
-    searchResults.value = Array.isArray(results) ? results : []
-    pickedIds.value = new Set(searchResults.value.map(r => r.externalId))
+    const res = await LeadsApi.scrapioSearch({ ...searchParams, cursor: more ? searchCursor.value : null })
+    const page = Array.isArray(res.results) ? res.results : []
+    searchResults.value = more ? [...(searchResults.value ?? []), ...page] : page
+    searchTotal.value = res.total
+    searchCursor.value = res.nextCursor
+    pickedIds.value = more
+      ? new Set([...pickedIds.value, ...page.map(r => r.externalId)])
+      : new Set(page.map(r => r.externalId))
   }
   catch (err) {
     const e = err as ApiError
@@ -386,6 +424,7 @@ async function importPicked() {
         <template #right>
           <UButton icon="i-lucide-search" color="neutral" variant="outline" label="Find businesses" @click="findModalOpen = true" />
           <UButton icon="i-lucide-upload" color="neutral" variant="outline" label="Import CSV" @click="importModalOpen = true" />
+          <UButton icon="i-lucide-download" color="neutral" variant="ghost" label="CSV template" @click="downloadCsvTemplate" />
           <UButton icon="i-lucide-plus" label="Add lead" @click="addModalOpen = true" />
         </template>
       </UDashboardNavbar>
@@ -608,18 +647,19 @@ async function importPicked() {
           <div class="grid md:grid-cols-[16rem_1fr] gap-6">
             <!-- Search form -->
             <div class="flex flex-col gap-3">
-              <UFormField label="Keyword">
-                <UInput v-model="searchParams.keyword" placeholder="barbershop, gym…" class="w-full" />
+              <UFormField label="Business types" hint="up to 50">
+                <USelectMenu
+                  v-model="searchParams.types" :items="typeOptions" value-key="value" multiple
+                  placeholder="attorney, landscaper…" class="w-full"
+                />
               </UFormField>
               <UFormField label="Location" hint="State or City, State">
                 <UInput v-model="searchParams.location" placeholder="TX or Austin, TX" class="w-full" />
               </UFormField>
-              <UFormField label="Category" hint="Google Maps category">
-                <UInput v-model="searchParams.category" placeholder="restaurant, gym…" class="w-full" />
-              </UFormField>
-              <UCheckbox v-model="searchParams.excludeClosed" label="Exclude permanently closed" />
+              <UCheckbox v-model="searchParams.hasEmail" label="Has email on website" />
               <UCheckbox v-model="searchParams.hasWebsite" label="Has website" />
               <UCheckbox v-model="searchParams.hasPhone" label="Has phone" />
+              <UCheckbox v-model="searchParams.excludeClosed" label="Exclude permanently closed" />
               <div class="grid grid-cols-2 gap-2">
                 <UFormField label="Min rating">
                   <UInputNumber :model-value="searchParams.minRating ?? undefined" :min="0" :max="5" :step="0.5" placeholder="4.0" @update:model-value="searchParams.minRating = $event ?? null" />
@@ -630,8 +670,8 @@ async function importPicked() {
               </div>
               <UButton
                 block icon="i-lucide-search" label="Search" :loading="searching"
-                :disabled="!searchParams.keyword && !searchParams.category"
-                @click="runSearch"
+                :disabled="!searchParams.types.length"
+                @click="runSearch()"
               />
             </div>
 
@@ -643,7 +683,7 @@ async function importPicked() {
               </div>
               <template v-else>
                 <div class="flex items-center justify-between">
-                  <span class="text-sm text-muted">{{ searchResults.length }} results · {{ pickedIds.size }} selected</span>
+                  <span class="text-sm text-muted">{{ searchResults.length }} loaded{{ searchTotal !== null ? ` of ${searchTotal.toLocaleString()}` : '' }} · {{ pickedIds.size }} selected</span>
                   <UButton size="xs" :disabled="!pickedIds.size" :loading="importingPicked" :label="`Import ${pickedIds.size} selected`" @click="importPicked" />
                 </div>
                 <div class="divide-y divide-default border border-default rounded-lg max-h-96 overflow-y-auto">
@@ -651,10 +691,16 @@ async function importPicked() {
                     <UCheckbox :model-value="pickedIds.has(r.externalId)" @update:model-value="togglePicked(r.externalId)" />
                     <div class="flex-1">
                       <div class="text-sm font-medium">{{ r.name }}</div>
-                      <div class="text-xs text-muted">{{ [r.city, r.state].filter(Boolean).join(', ') }} · ★ {{ r.rating ?? '—' }} ({{ r.reviewCount ?? 0 }}) · {{ r.website ?? 'no website' }} · {{ r.phone ?? 'no phone' }}</div>
+                      <div class="text-xs text-muted">{{ [r.city, r.state].filter(Boolean).join(', ') }} · ★ {{ r.rating ?? '—' }} ({{ r.reviewCount ?? 0 }}) · {{ r.email ?? 'no email' }} · {{ r.website ?? 'no website' }} · {{ r.phone ?? 'no phone' }}</div>
                     </div>
                   </label>
                 </div>
+                <UButton
+                  v-if="searchCursor"
+                  variant="outline" color="neutral" size="xs" class="self-start"
+                  label="Load 50 more" :loading="searching"
+                  @click="runSearch(true)"
+                />
               </template>
             </div>
           </div>

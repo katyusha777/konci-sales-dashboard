@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../lib/context'
+import { adminRoutes } from './admin.route'
 import { authRoutes } from './auth.route'
 import { avatarsRoutes } from './avatars.route'
 import { healthRoutes } from './health.route'
@@ -11,6 +12,7 @@ import { schedulerRoutes } from './scheduler.route'
 import { statsRoutes } from './stats.route'
 import { templatesRoutes } from './templates.route'
 import { testRoutes } from './test.route'
+import { toolsRoutes } from './tools.route'
 import { unsubscribeRoutes } from './unsubscribe.route'
 import { videosRoutes } from './videos.route'
 
@@ -27,5 +29,7 @@ routes.route('/v', publicVideoRoutes) // PUBLIC
 routes.route('/scheduler', schedulerRoutes)
 routes.route('/stats', statsRoutes)
 routes.route('/unsubscribe', unsubscribeRoutes) // PUBLIC
+routes.route('/tools', toolsRoutes)
 routes.route('/playground', playgroundRoutes)
+routes.route('/admin', adminRoutes)
 routes.route('/test', testRoutes)

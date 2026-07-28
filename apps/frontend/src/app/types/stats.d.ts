@@ -18,6 +18,7 @@ export interface ITickSummary {
   videosCompleted: number
   videosFailed: number
   videosProcessing: number
+  leadsEnriched: number
   konciRegistered: number
   konciPrepared: number
   leadsSynced: number

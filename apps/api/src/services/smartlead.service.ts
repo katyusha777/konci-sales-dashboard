@@ -133,10 +133,12 @@ export abstract class SmartleadService {
   }
 
   // Per-lead × per-sequence-step email events — the S5 stats-mirror source.
-  // eventTimeGt (YYYY-MM-DD) makes pulls incremental.
-  static async getCampaignStatistics(env: Env, id: string, opts?: { offset?: number, limit?: number, eventTimeGt?: string }): Promise<{ total: number | null, stats: Array<SmartleadLeadStat>, raw: unknown }> {
+  // No incremental filter: the API's only date params filter by SENT time (would miss
+  // late opens/replies on old sends), and `event_time_gt` is rejected (400, live
+  // 2026-07-28). Full pull each time; upserts are idempotent.
+  static async getCampaignStatistics(env: Env, id: string, opts?: { offset?: number, limit?: number }): Promise<{ total: number | null, stats: Array<SmartleadLeadStat>, raw: unknown }> {
     const data = await this.request<Record<string, unknown>>(env, `/campaigns/${id}/statistics`, {
-      query: { offset: opts?.offset ?? 0, limit: opts?.limit ?? 20, event_time_gt: opts?.eventTimeGt },
+      query: { offset: opts?.offset ?? 0, limit: opts?.limit ?? 20 },
     })
     const rows = Array.isArray(data.data) ? data.data as Array<Record<string, unknown>> : []
     return {

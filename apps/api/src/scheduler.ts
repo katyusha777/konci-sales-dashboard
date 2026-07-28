@@ -5,13 +5,15 @@
 //
 // Ticks:
 //  1. videos      — poll HeyGen for PROCESSING renders → download video+thumb to R2
-//  2. konci reg   — auto-register list members on the Konci platform (owner rule:
+//  2. enrich      — auto-enrich freshly mined leads (enrichmentStatus PENDING, batch of 3)
+//  3. konci reg   — auto-register list members on the Konci platform (owner rule:
 //                   a lead is never pushed to Smartlead without a Konci account)
-//  3. konci poll  — poll PENDING registrations until terminal (~80s pipeline)
-//  4. list sync   — push eligible members of ACTIVE linked lists to Smartlead
-//  5. stats pull  — mirror Smartlead per-lead email stats (throttled ~30 min/list)
+//  4. konci poll  — poll PENDING registrations until terminal (~80s pipeline)
+//  5. list sync   — push eligible members of ACTIVE linked lists to Smartlead
+//  6. stats pull  — mirror Smartlead per-lead email stats (throttled ~30 min/list)
 
 import { createPrisma } from './lib/prisma'
+import { EnrichmentService } from './services/enrichment.service'
 import { KonciRegistrationService } from './services/konci-registration.service'
 import { LeadListService } from './services/lead-list.service'
 import { VideoService } from './services/video.service'
@@ -20,6 +22,7 @@ export interface TickSummary {
   videosCompleted: number
   videosFailed: number
   videosProcessing: number
+  leadsEnriched: number
   konciRegistered: number
   konciPrepared: number
   leadsSynced: number
@@ -33,8 +36,9 @@ export async function runCronTick(env: Env): Promise<TickSummary> {
 
   // Strictly staged: register → poll → sync, so a registration that just turned
   // PREPARED is synced on the SAME tick (sync must see the poll's writes).
-  const [videos, konciReg] = await Promise.allSettled([
+  const [videos, enrich, konciReg] = await Promise.allSettled([
     VideoService.runPollTick(prisma, env),
+    EnrichmentService.runEnrichTick(prisma, env),
     KonciRegistrationService.runRegisterTick(prisma, env),
   ])
   const [konciPoll] = await Promise.allSettled([KonciRegistrationService.runPollTick(prisma, env)])
@@ -43,7 +47,7 @@ export async function runCronTick(env: Env): Promise<TickSummary> {
     LeadListService.runStatsPullTick(prisma, env),
   ])
 
-  for (const [name, result] of [['videos', videos], ['konci-register', konciReg], ['konci-poll', konciPoll], ['list-sync', sync], ['stats-pull', stats]] as const) {
+  for (const [name, result] of [['videos', videos], ['enrich', enrich], ['konci-register', konciReg], ['konci-poll', konciPoll], ['list-sync', sync], ['stats-pull', stats]] as const) {
     if (result.status === 'rejected')
       console.error(`[scheduler] ${name} tick failed:`, result.reason)
   }
@@ -52,6 +56,7 @@ export async function runCronTick(env: Env): Promise<TickSummary> {
     videosCompleted: videos.status === 'fulfilled' ? videos.value.completed : 0,
     videosFailed: videos.status === 'fulfilled' ? videos.value.failed : 0,
     videosProcessing: videos.status === 'fulfilled' ? videos.value.processing : 0,
+    leadsEnriched: enrich.status === 'fulfilled' ? enrich.value.enriched : 0,
     konciRegistered: konciReg.status === 'fulfilled' ? konciReg.value.registered : 0,
     konciPrepared: konciPoll.status === 'fulfilled' ? konciPoll.value.prepared : 0,
     leadsSynced: sync.status === 'fulfilled' ? sync.value.synced : 0,

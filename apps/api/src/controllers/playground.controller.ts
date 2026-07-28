@@ -397,12 +397,11 @@ export default class PlaygroundController extends Controller {
     }
   }
 
-  async smartleadStatistics(req: AppRequest<{ Params: { id: string }, Query: { offset?: string, limit?: string, eventTimeGt?: string } }>): Promise<ApiResponse<{ total: number | null, stats: Array<SmartleadLeadStat>, raw: unknown }>> {
+  async smartleadStatistics(req: AppRequest<{ Params: { id: string }, Query: { offset?: string, limit?: string } }>): Promise<ApiResponse<{ total: number | null, stats: Array<SmartleadLeadStat>, raw: unknown }>> {
     try {
       return this.data(await SmartleadService.getCampaignStatistics(this.c.env, req.params.id, {
         offset: req.query.offset ? Number(req.query.offset) : undefined,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
-        eventTimeGt: req.query.eventTimeGt,
       }))
     }
     catch (err) {

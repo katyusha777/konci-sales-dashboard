@@ -109,7 +109,7 @@ and VideoService can fill them automatically when a HeyGen video completes.
    - chunk ≤ 400 → `POST /campaigns/{id}/leads` with custom fields:
      `first_name`, `last_name`, `company_name`, `website`, `phone_number`, `location`
      (native) + `custom_fields`: `industry`, `city`, `video_url`, `video_thumbnail`,
-     `demo_phone`, `demo_pin`
+     `demo_phone`, `demo_phone_e164` (raw +1… for tel: links), `demo_pin`
    - mark `SYNCED` / `FAILED` (+ error verbatim); set `lastSyncedAt`
 4. Sync is **one-way and additive** (we never delete/update leads in Smartlead from
    here in V1; re-sync only pushes never-synced members — Smartlead dedups by email
@@ -160,7 +160,7 @@ and VideoService can fill them automatically when a HeyGen video completes.
   plus a usable email (`resolveOutreachEmail`: priority contact → lead email —
   superseded by S4b's AI pick later). Ineligible members stay PENDING with the reason
   in `syncError` and flow automatically once ready. Custom fields pushed:
-  `business_name, industry, city, video_url, video_thumbnail, demo_phone, demo_pin,
+  `business_name, industry, city, video_url, video_thumbnail, demo_phone, demo_phone_e164, demo_pin,
   claim_url`. Verified live 2026-07-23: full chain (register → prepared → sync) landed
   a lead in campaign #3711196 with all fields.
 - **S4a — Video templates + outreach video fields** *(DONE 2026-07-23)*: migration

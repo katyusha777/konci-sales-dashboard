@@ -5,6 +5,7 @@
 import type { createPrisma } from '../lib/prisma'
 import type { EnrichmentStatus, LeadSource, LeadStatus, Prisma } from '../generated/prisma/client'
 import type { ScrapioResult } from './scrapio.service'
+import { testModeEmail } from '../lib/format'
 import { getHostname, isSharedDomain } from '../lib/website'
 
 type PrismaClient = ReturnType<typeof createPrisma>
@@ -190,13 +191,16 @@ export abstract class LeadService {
   }
 
   /** Import selected Scrap.io search results as leads (source SCRAPIO). */
-  static async importScrapioResults(prisma: PrismaClient, results: Array<ScrapioResult>): Promise<number> {
+  static async importScrapioResults(prisma: PrismaClient, env: Env, results: Array<ScrapioResult>): Promise<number> {
+    // EMAIL_TEST_MODE paranoia (plan §6): don't even STORE the scraped company email —
+    // the lead gets the @katyusha.app catch-all so no path can ever mail the real business.
+    const testMode = env.EMAIL_TEST_MODE === 'true'
     let created = 0
     for (const r of results) {
       const { created: isNew } = await this.create(prisma, {
         name: r.name,
         website: r.website,
-        email: r.email,
+        email: testMode ? testModeEmail(r.name) : r.email,
         phone: r.phone,
         street: r.street,
         city: r.city,
@@ -251,6 +255,19 @@ export abstract class LeadService {
   // Bulk delete — related rows cascade (contacts, videos, members, registration, …).
   static async removeMany(prisma: PrismaClient, ids: Array<string>): Promise<number> {
     const result = await prisma.lead.deleteMany({ where: { id: { in: ids } } })
+    return result.count
+  }
+
+  // Admin nuke: EVERY lead + cascades, plus the generated video files in R2
+  // (row cascade alone would orphan the R2 objects). R2 cleanup is best-effort —
+  // an R2 hiccup (e.g. dev bindings) must not block the DB wipe.
+  static async removeAll(prisma: PrismaClient, env: Env): Promise<number> {
+    const videos = await prisma.video.findMany({ where: { r2Key: { not: null } }, select: { r2Key: true } })
+    for (let i = 0; i < videos.length; i += 1000) { // R2 delete caps at 1000 keys/call
+      await env.VIDEOS.delete(videos.slice(i, i + 1000).map(v => v.r2Key!))
+        .catch(err => console.error('[admin] R2 video cleanup failed (continuing):', (err as Error).message))
+    }
+    const result = await prisma.lead.deleteMany({})
     return result.count
   }
 

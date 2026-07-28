@@ -23,13 +23,21 @@ interface ScrapioPlace {
   price_range?: string
   reviews_rating?: number
   reviews_count?: number
+  // Live shape (2026-07-26): emails/phones are OBJECTS, socials are per-network arrays.
   website_data?: {
-    emails?: Array<string>
-    phones?: Array<string>
-    social_links?: Record<string, string>
+    emails?: Array<string | { email?: string }>
+    phones?: Array<string | { phone?: string }>
+    facebook?: Array<string> | null
+    instagram?: Array<string> | null
+    linkedin?: Array<string> | null
+    youtube?: Array<string> | null
+    twitter?: Array<string> | null
+    tiktok?: Array<string> | null
     technologies?: Array<string>
   }
 }
+
+const SOCIAL_KEYS = ['facebook', 'instagram', 'linkedin', 'youtube', 'twitter', 'tiktok'] as const
 
 export interface ScrapioResult {
   externalId: string
@@ -60,15 +68,35 @@ export interface ScrapioResult {
 
 export interface ScrapioSearchParams {
   type?: string
+  types?: Array<string> // up to 50 (Agency plan)
   location?: string
   minRating?: number
   minReviews?: number
   requireWebsite?: boolean
   requirePhone?: boolean
+  requireEmail?: boolean // website_has_emails — the filter that matters for cold email
   excludeClosed?: boolean
   perPage?: number
   cursor?: string
 }
+
+// Scrap.io only accepts admin1 CODES ("TX") — full names return 0 results silently.
+const US_STATES: Record<string, string> = {
+  'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR', 'california': 'CA',
+  'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE', 'florida': 'FL', 'georgia': 'GA',
+  'hawaii': 'HI', 'idaho': 'ID', 'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA',
+  'kansas': 'KS', 'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+  'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS', 'missouri': 'MO',
+  'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ',
+  'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH',
+  'oklahoma': 'OK', 'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+  'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT', 'vermont': 'VT',
+  'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV', 'wisconsin': 'WI', 'wyoming': 'WY',
+  'district of columbia': 'DC',
+}
+
+// /gmap/types is a static ~4k list — cache per isolate.
+let typesCache: Array<{ id: string, text: string }> | null = null
 
 export abstract class ScrapioService {
   static async search(env: Env, params: ScrapioSearchParams): Promise<{ results: Array<ScrapioResult>, nextCursor: string | null, total: number | null }> {
@@ -81,6 +109,7 @@ export abstract class ScrapioService {
       qs.set('admin1_code', loc.admin1Code)
     if (params.type)
       qs.set('type', params.type)
+    for (const t of params.types ?? []) qs.append('types[]', t)
     qs.set('per_page', String(this.perPage(params.perPage ?? 10)))
     if (params.cursor)
       qs.set('cursor', params.cursor)
@@ -88,10 +117,13 @@ export abstract class ScrapioService {
       qs.set('gmap_reviews_rating_gte', String(params.minRating))
     if (params.minReviews != null)
       qs.set('gmap_reviews_count_gte', String(params.minReviews))
+    // Scrap.io booleans must be 1/0 — the string "true" is a 422.
     if (params.requireWebsite)
-      qs.set('gmap_has_website', 'true')
+      qs.set('gmap_has_website', '1')
     if (params.requirePhone)
-      qs.set('gmap_has_phone', 'true')
+      qs.set('gmap_has_phone', '1')
+    if (params.requireEmail)
+      qs.set('website_has_emails', '1')
     // Scrap.io only accepts gmap_is_closed=true (to INCLUDE closed) — filter after the fact.
 
     const res = await fetch(`${BASE_URL}/gmap/search?${qs}`, {
@@ -129,19 +161,31 @@ export abstract class ScrapioService {
     return this.mapPlace(body.data)
   }
 
-  // "Austin, TX" → city+state · "TX"/"Texas" → state · "Austin" → city
+  static async listTypes(env: Env): Promise<Array<{ id: string, text: string }>> {
+    if (typesCache)
+      return typesCache
+    const res = await fetch(`${BASE_URL}/gmap/types`, {
+      headers: { Authorization: `Bearer ${env.SCRAPIO_API_KEY}` },
+    })
+    if (!res.ok)
+      throw new Error(`Scrap.io error ${res.status}: ${await res.text()}`)
+    typesCache = await res.json()
+    return typesCache!
+  }
+
+  // "Austin, TX" → city+state · "TX"/"Texas" → state · anything else → city
   private static parseLocation(location: string): { city?: string, admin1Code?: string, countryCode: string } {
     const trimmed = location.trim()
     if (!trimmed)
       return { countryCode: 'us' }
+    const toCode = (s: string) => /^[A-Za-z]{2}$/.test(s) ? s.toUpperCase() : US_STATES[s.toLowerCase()]
     if (trimmed.includes(',')) {
       const [city, state] = trimmed.split(',').map(s => s.trim())
-      return { city: city || undefined, admin1Code: state || undefined, countryCode: 'us' }
+      return { city: city || undefined, admin1Code: state ? toCode(state) ?? state : undefined, countryCode: 'us' }
     }
-    const isStateCode = /^[A-Z]{2}$/.test(trimmed)
-    const looksLikeStateName = /^[A-Z][a-z]+(?:\s[A-Z][a-z]+)*$/.test(trimmed) && trimmed.split(' ').length <= 3
-    if (isStateCode || looksLikeStateName)
-      return { admin1Code: trimmed, countryCode: 'us' }
+    const code = toCode(trimmed)
+    if (code)
+      return { admin1Code: code, countryCode: 'us' }
     return { city: trimmed, countryCode: 'us' }
   }
 
@@ -158,6 +202,13 @@ export abstract class ScrapioService {
 
   private static mapPlace(place: ScrapioPlace): ScrapioResult {
     const mainType = place.types?.find(t => t.is_main)?.type ?? place.types?.[0]?.type
+    const firstEmail = place.website_data?.emails?.[0]
+    const socialLinks: Record<string, string> = {}
+    for (const key of SOCIAL_KEYS) {
+      const url = place.website_data?.[key]?.[0]
+      if (url)
+        socialLinks[key] = url
+    }
     return {
       externalId: place.google_id ?? place.place_id ?? '',
       googleId: place.google_id ?? null,
@@ -165,7 +216,7 @@ export abstract class ScrapioService {
       name: place.name ?? '',
       website: place.website ?? null,
       phone: place.phone ?? null,
-      email: place.website_data?.emails?.[0] ?? null,
+      email: (typeof firstEmail === 'string' ? firstEmail : firstEmail?.email) ?? null,
       street: place.location_street_1 ?? null,
       city: place.location_city ?? null,
       state: place.location_state ?? null,
@@ -180,7 +231,7 @@ export abstract class ScrapioService {
       priceRange: place.price_range ?? null,
       isClaimed: place.is_claimed ?? null,
       isPermanentlyClosed: place.is_closed ?? null,
-      socialLinks: place.website_data?.social_links ?? null,
+      socialLinks: Object.keys(socialLinks).length ? socialLinks : null,
       technologies: place.website_data?.technologies ?? [],
       raw: place,
     }

@@ -1,4 +1,4 @@
-import type { IEnrichmentResponse, IImportReport, ILead, ILeadCreate, ILeadDetail, ILeadFilters, ILeadNote, IPaginated, IScrapioResult, IScrapioSearchParams } from '~/app/types'
+import type { IEnrichmentResponse, IImportReport, ILead, ILeadCreate, ILeadDetail, ILeadFilters, ILeadNote, IPaginated, IScrapioResult, IScrapioSearch, IScrapioSearchParams, IScrapioType } from '~/app/types'
 import { $api } from './client'
 
 export abstract class LeadsApi {
@@ -52,9 +52,12 @@ export abstract class LeadsApi {
   }
 
   // "Find businesses" via Scrap.io — surfaces the provider error verbatim
-  // (403 until the Scrap.io subscription includes API access)
-  static scrapioSearch(params: IScrapioSearchParams): Promise<Array<IScrapioResult>> {
+  static scrapioSearch(params: IScrapioSearchParams): Promise<IScrapioSearch> {
     return $api('/api/leads/scrapio/search', { method: 'POST', body: params })
+  }
+
+  static scrapioTypes(): Promise<Array<IScrapioType>> {
+    return $api('/api/leads/scrapio/types')
   }
 
   static scrapioImport(results: Array<IScrapioResult>): Promise<number> {

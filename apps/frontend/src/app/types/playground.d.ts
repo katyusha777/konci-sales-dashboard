@@ -40,6 +40,7 @@ export interface IScrapioLiveParams {
   minReviews?: number
   requireWebsite?: boolean
   requirePhone?: boolean
+  requireEmail?: boolean
   excludeClosed?: boolean
   perPage?: number
   cursor?: string

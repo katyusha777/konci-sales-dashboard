@@ -1,4 +1,5 @@
 import type { IAuthUser } from '~/app/types'
+import { ApiError } from '~/app/api/client'
 import { AuthApi } from '~/app/api/auth.api'
 
 // undefined = not checked yet, null = checked & not logged in
@@ -9,8 +10,11 @@ export function useAuth() {
     try {
       user.value = await AuthApi.me()
     }
-    catch {
-      user.value = null
+    catch (err) {
+      // Only a real 401 means logged out. A transient failure (API rebuilding in
+      // dev, network blip) must NOT bounce a valid 30-day session to /login.
+      if (err instanceof ApiError && err.status === 401)
+        user.value = null
     }
   }
 

@@ -12,6 +12,7 @@ leadsRoutes.get('/industries', action(LeadController, 'industries'))
 leadsRoutes.post('/import/map-headers', action(LeadController, 'mapHeaders'))
 leadsRoutes.post('/import', action(LeadController, 'importCsv'))
 leadsRoutes.post('/scrapio/search', action(LeadController, 'scrapioSearch'))
+leadsRoutes.get('/scrapio/types', action(LeadController, 'scrapioTypes'))
 leadsRoutes.post('/scrapio/import', action(LeadController, 'scrapioImport'))
 leadsRoutes.post('/bulk-delete', action(LeadController, 'bulkDelete'))
 

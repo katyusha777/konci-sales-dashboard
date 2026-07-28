@@ -6,7 +6,7 @@ const { error: apiError } = await useAsyncData('playground.health', () => $api('
 
 // status: live API test results, 2026-07-12 (✅ working · ⚠️ partial · 🚫 blocked)
 const services = [
-  { name: 'Scrap.io', to: '/playground/scrapio', icon: 'i-lucide-map-pin', description: 'Search Google Maps business data — the lead source.', status: '🚫', statusNote: 'API returns 403 — the current Scrap.io subscription has no API access. Upgrade the plan at app.scrap.io.' },
+  { name: 'Scrap.io', to: '/playground/scrapio', icon: 'i-lucide-map-pin', description: 'Search Google Maps business data — the lead source.', status: '✅', statusNote: 'Live 2026-07-26 on the Agency plan ($199/mo): search + place + types verified, 40k export credits/mo. No whole-country search — query per state.' },
   { name: 'Google Places', to: '/playground/google-places', icon: 'i-lucide-map', description: 'Verified business data — rating, hours, canonical website.', status: '✅' },
   { name: 'Firecrawl', to: '/playground/firecrawl', icon: 'i-lucide-globe', description: 'Scrape the business\'s own website — staff, services, hours.', status: '✅' },
   { name: 'OpenRouter', to: '/playground/openrouter', icon: 'i-lucide-sparkles', description: 'LLM extraction — scraped markdown → facts, services, staff.', status: '✅' },

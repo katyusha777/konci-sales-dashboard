@@ -40,6 +40,12 @@ export interface OutreachEmailPick {
   raw: unknown
 }
 
+export interface BuiltEmail {
+  subject: string
+  body: string
+  raw: unknown
+}
+
 export interface ExtractSignalsResult {
   contentIsRelevant: boolean
   contentRelevanceReason: string | null
@@ -392,5 +398,55 @@ Respond with JSON only:
       reason: parsed.reason ?? null,
       raw,
     }
+  }
+
+  /**
+   * Tools → Email builder: turn free-form instructions (or a pasted draft) into a
+   * Smartlead-ready cold email using our merge tags. Tag list must stay in sync with
+   * LeadListService.buildPushLead customFields + Smartlead's standard lead fields.
+   */
+  static async buildOutreachEmail(env: Env, input: { instructions: string }): Promise<BuiltEmail> {
+    const prompt = `You write cold outreach emails for Konci (konci.ai) — an AI phone operator for small businesses. The email is sent through Smartlead, which substitutes {{merge_tags}} per lead.
+
+About Konci (source: konci.ai, 2026-07 — use what's relevant, never invent claims beyond these):
+- Answers inbound calls 24/7 with human-like voice — most callers can't tell it's an AI.
+- Books appointments, takes orders and payments, qualifies leads, takes messages, warm-transfers to a human when needed.
+- Handles unlimited simultaneous calls; speaks 90+ languages; consistent service every call.
+- Pain it removes: missed calls = lost customers; receptionist staffing costs, training, turnover, breaks.
+- Integrates with Salesforce, HubSpot, Google Calendar, Stripe, Zendesk, Twilio; logs every call automatically.
+- Setup takes minutes, no code; free trial, no credit card required; built on 20+ years of telephony experience.
+- Brand tone: professional but approachable — plain language, remove friction ("never miss a customer"), no hype.
+
+The KILLER HOOK for these emails: we already set Konci up FOR the recipient's business. Their demo line ({{demo_phone}} + PIN {{demo_pin}}) is live right now, answering AS their business — they can call it and hear it themselves. The dashboard is pre-built and one click away ({{claim_url}}). Prefer showing (call the line, watch the video) over telling (feature lists). Cold-email discipline: short sentences, one clear CTA, no spammy superlatives, sound like a person.
+
+Available merge tags (use them instead of concrete values wherever the email references the recipient or their personalized demo — never invent tags not on this list):
+- {{first_name}}, {{last_name}} — recipient contact name (may be empty for generic inboxes)
+- {{business_name}} — the recipient's business name
+- {{industry}}, {{city}} — the business's industry / city (may be empty)
+- {{demo_phone}} — the lead's PERSONAL Konci demo phone number, already answering as their business (formatted like "(949) 216-4643")
+- {{demo_phone_e164}} — the same number in raw dialable form ("+19492164643") — ONLY for tel: hrefs, never as visible text
+- {{demo_pin}} — the PIN for that demo line
+- {{claim_url}} — link where they claim the ready-made Konci account/dashboard we prepared for them
+- {{video_url}} — personalized demo video link · {{video_thumbnail}} — its thumbnail image URL
+
+Smartlead supports liquid conditionals ({{#if}}). To embed the video, use exactly this snippet:
+{{#if video_url}}<a href="{{video_url}}"><img src="{{video_thumbnail}}" width="480" alt="A video we made for you"/></a>{{/if}}
+
+Whenever the demo phone number appears, make it tap-to-call with the PIN auto-dialed after a pause (the commas are DTMF pauses), using exactly this pattern:
+<a href="tel:{{demo_phone_e164}},,{{demo_pin}}">{{demo_phone}}</a>
+Still mention the PIN in the visible text (desktop readers can't tap), e.g. … (PIN {{demo_pin}}).
+
+The user gives either instructions for the email they want, or a draft to convert. Follow their intent. In a draft, replace concrete names/numbers/links that correspond to a merge tag with the tag. Subject may use tags too.
+
+Body format: an HTML fragment ready for Smartlead's editor — no <html>/<head>/<body> wrapper, no CSS or style attributes. Each paragraph is a <div>, with an empty <div><br></div> between paragraphs. Links are real anchors, e.g. <a href="{{claim_url}}">claim your dashboard</a>. Never print a bare URL as text.
+
+User input:
+${input.instructions}
+
+Respond with JSON only: { "subject": "…", "body": "…" }`
+
+    const { content, raw } = await this.chat(env, MODELS.LLAMA4, [{ role: 'user', content: prompt }], 0.7)
+    const parsed = JSON.parse(content) as { subject?: string, body?: string }
+    return { subject: parsed.subject ?? '', body: parsed.body ?? '', raw }
   }
 }

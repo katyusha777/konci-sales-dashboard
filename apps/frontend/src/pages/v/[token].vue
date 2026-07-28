@@ -74,14 +74,15 @@ function onTimeUpdate() {
           We already set it up. Call your demo line and talk to it right now:
         </p>
         <div v-if="page.demoPhone" class="flex items-center justify-center gap-4">
-          <div class="border border-default rounded-lg px-4 py-2">
+          <!-- tel: with DTMF pauses — mobile dials and auto-enters the PIN -->
+          <a :href="`tel:${page.demoPhone}${page.demoPin ? `,,${page.demoPin}` : ''}`" class="border border-default rounded-lg px-4 py-2 hover:bg-elevated/60">
             <div class="text-xs text-muted">
               Call
             </div>
             <div class="font-semibold">
               {{ formatPhoneNational(page.demoPhone) }}
             </div>
-          </div>
+          </a>
           <div v-if="page.demoPin" class="border border-default rounded-lg px-4 py-2">
             <div class="text-xs text-muted">
               PIN

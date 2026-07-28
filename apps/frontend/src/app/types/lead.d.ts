@@ -199,14 +199,26 @@ export interface ILeadFilters {
 
 // Scrap.io "Find businesses" search
 export interface IScrapioSearchParams {
-  keyword: string
+  types: Array<string>
   location: string
-  category: string
   excludeClosed: boolean
   hasWebsite: boolean
   hasPhone: boolean
+  hasEmail: boolean
   minRating: number | null
   minReviews: number | null
+  cursor?: string | null
+}
+
+export interface IScrapioType {
+  id: string
+  text: string
+}
+
+export interface IScrapioSearch {
+  results: Array<IScrapioResult>
+  total: number | null
+  nextCursor: string | null
 }
 
 // Mirrors the API's ScrapioResult (services/scrapio.service.ts) — the search

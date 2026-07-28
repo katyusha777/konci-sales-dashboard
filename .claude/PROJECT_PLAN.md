@@ -221,19 +221,21 @@ detail page's "Run scheduler now" button) — for sending the next batch without
 min; rate limits still apply (they're time-windowed). Campaigns are activated from that page
 too (DRAFT → "Activate"). Ticks (idempotent, DB-driven):
 
-- **Every 5 min — campaign sends**: for each ACTIVE campaign, count emails sent in the last
-  hour/day vs `maxSendsPerHour/Day`; take due `campaign_leads` (`status IN (PENDING, SCHEDULED)
-  AND nextSendAt <= now()`) up to remaining budget; for each: if `withVideo` and video not
-  COMPLETED → trigger/await video first (re-check next tick); render template → create Email
-  row → `EmailService.send()` → advance `currentStep`, set `nextSendAt` from next
-  CampaignStep's `delayDays`, or mark COMPLETED. Skip/suppress leads that bounced,
-  unsubscribed, replied, or are DO_NOT_CONTACT.
-- **Every 5 min — video polling**: `videos.status = PROCESSING` → `HeygenService.videoStatus()`
+- **Video polling**: `videos.status = PROCESSING` → `HeygenService.videoStatus()`
   → on complete, download to R2, mark COMPLETED, write LeadCost.
-- **Daily (02:00 UTC, existing)**: denormalized stat rollups if/when list queries get slow.
+- **Auto-enrich** (added 2026-07-28): freshly mined leads land as `enrichmentStatus =
+  PENDING` → the tick runs the full waterfall on the 3 oldest per tick (atomic claim to
+  PENDING→IN_PROGRESS so overlapping ticks can't double-spend credits). FAILED runs are
+  never auto-retried — owner retries from the lead page.
+- **Konci register + poll**: list members auto-get a Konci test account, PENDING
+  registrations polled until terminal (see §4 / smartlead-integration.md).
+- **List sync + stats pull**: eligible members of ACTIVE linked lists → Smartlead;
+  per-lead email stats mirrored back (~30 min/list throttle).
 
-Rate-limit note: counting sent emails in a time window is the enforcement — simple,
-correct-enough, no token buckets.
+(Campaign sends were dropped — Smartlead owns sending; see smartlead-integration.md.)
+
+Dev note: `wrangler dev` never fires `scheduled`, so `src/index.ts` has a dev-only
+self-tick — any localhost API request runs `runCronTick` at most once a minute.
 
 ## 6. Test mode (env-driven, hard to get wrong)
 
@@ -296,6 +298,13 @@ pipeline. `.claude/TELEPHONY.md` is kept as background reference only.)
 - `/v/:token` — PUBLIC video landing page: plays the R2 video (posts VideoEvents),
   shows "Call your demo: {demoPhone}, PIN {demoPin}", CTA link. No dashboard chrome.
 - `/unsubscribe/:token` — public one-click unsubscribe.
+- `/tools/*` — owner utilities (sidebar "Tools" group, added 2026-07-28). Unlike the
+  playground (per-provider validation), each tool composes existing services into a
+  workflow helper. First tool: **Email builder** (`/tools/email-builder` →
+  `POST /api/tools/email-builder`) — describe an email or paste a draft, one
+  OpenRouter call returns a Smartlead-ready subject+body using our merge tags
+  (`{{business_name}}`, `{{demo_phone}}`, `{{demo_pin}}`, `{{claim_url}}`,
+  `{{video_url}}` snippet, …).
 
 ## 8. Build order — FRONTEND-FIRST
 
@@ -331,8 +340,16 @@ Full §3 Prisma schema (UUIDv7 ids) · `LeadService` (dedup: googlePlaceId → d
 name+city) + `LeadController` + `/api/leads/*` · manual "Add lead" form (owner request —
 primary input while Scrap.io has no API access) · real CSV import (client RFC-4180 parser
 in `utils/csv.ts` → LLM header-mapping prefill → mapping step → dedup report) ·
-Scrap.io search/import wired real but **blocked on the subscription** (403 surfaces
-verbatim in the modal until API access is bought) · `leads.api.ts` swapped to `$api`.
+Scrap.io search/import wired real · `leads.api.ts` swapped to `$api`.
+*(2026-07-26 — Agency plan $199/mo active, search UNBLOCKED and live-tested.)* Search
+takes `types[]` (multi-select from `/gmap/types`, up to 50), location as state code or
+"City, ST" (full state names normalized to codes — Scrap.io silently returns 0 for
+names), `website_has_emails` filter (the phase-1 cold-email one, default ON in the
+modal), cursor "Load 50 more" pagination with total count. Gotchas encoded in
+`scrapio.service.ts`: booleans must be `1`/`0` (not `true`), `website_data.emails` are
+objects (`{email, category…}`), socials are per-network keys not `social_links`.
+Whole-country search is NOT in the plan — automated per-state sweeps stay a Phase-later
+scheduler job.
 
 **Phase B2 — Enrichment backend** *(DONE 2026-07-12)*
 `EnrichmentService` runs the FULL old waterfall (owner decision — see ENRICHMENT.md

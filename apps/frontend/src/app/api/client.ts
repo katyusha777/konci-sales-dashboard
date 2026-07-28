@@ -14,6 +14,11 @@ export const $api = $fetch.create({
     if (body && typeof body === 'object' && 'success' in body) {
       if (body.success === true && 'data' in body)
         response._data = body.data
+      // Some controllers return failure envelopes at HTTP 200 (this.error()) —
+      // without this throw they'd resolve as "data" and error paths would look
+      // like successes (e.g. the list-activation gate).
+      else if (body.success === false)
+        throw new ApiError(body.message ?? 'Request failed', body.info ?? null, response.status)
     }
   },
   onResponseError({ response }) {
