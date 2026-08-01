@@ -1,2 +1,0 @@
-# Copy to .dev.vars — used by `wrangler dev`
-DATABASE_URL="postgresql://user:password@host/dbname?sslmode=require"
